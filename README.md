@@ -19,21 +19,6 @@ Aplikasi web sederhana untuk mencatat dan menganalisis trade. Dibangun dengan Ne
 - [Supabase](https://supabase.com): PostgreSQL, Auth, dan Storage
 - CSS biasa (tanpa Tailwind)
 
-## Struktur proyek
-
-```
-app/
-  page.tsx          Halaman utama (login, form, statistik, kalender, tabel)
-  globals.css       Gaya tampilan
-  layout.tsx        Layout bawaan Next.js
-lib/
-  supabase.ts       Klien Supabase
-supabase/
-  schema.sql        Tabel trades + aturan keamanan (jalankan pertama)
-  migration-2.sql   Kolom stop loss/take profit/screenshot + bucket storage (jalankan kedua)
-.env.local.example  Contoh variabel lingkungan
-```
-
 ## Prasyarat
 
 - Node.js 20.9 atau lebih baru (cek dengan `node -v`)
@@ -86,16 +71,6 @@ Buka http://localhost:3000, daftar akun atau login, lalu mulai mencatat trade.
 
 > Setiap kali mengubah `.env.local`, hentikan server dengan `Ctrl + C` dan jalankan lagi.
 
-## Deploy ke Netlify
-
-1. Push proyek ke GitHub (pastikan `.env.local` tidak ikut ter-commit).
-2. Di [Netlify](https://app.netlify.com): **Add new project > Import an existing project**, pilih repo Anda. Netlify mengenali Next.js dan mengisi pengaturan build otomatis.
-3. Tambahkan environment variables `NEXT_PUBLIC_SUPABASE_URL` dan `NEXT_PUBLIC_SUPABASE_ANON_KEY` **sebelum** deploy (nilainya ditanam saat build; kalau diubah, deploy ulang).
-4. Klik **Deploy**.
-5. Di Supabase buka **Authentication > URL Configuration**, lalu isi **Site URL** dan **Redirect URLs** dengan alamat Netlify Anda.
-
-Setiap `git push` ke branch `main` akan memicu deploy otomatis.
-
 ## Keamanan
 
 - Akses data dijaga oleh **Row Level Security** di database, bukan oleh aplikasi saja. Pengguna hanya bisa membaca dan mengubah baris miliknya.
@@ -111,22 +86,3 @@ Setiap `git push` ke branch `main` akan memicu deploy otomatis.
 - **Profit factor** = total profit ÷ total kerugian.
 
 Perhitungan memakai selisih harga × ukuran. Untuk instrumen yang nilainya bergantung pada ukuran kontrak atau nilai pip (misalnya forex), sesuaikan cara Anda mengisi ukuran agar P&L sesuai dengan akun broker.
-
-## Pemecahan masalah
-
-| Masalah | Penyebab dan solusi |
-|---|---|
-| `supabaseUrl is required` | `.env.local` belum ada, salah nama (misalnya `.env.local.txt`), salah lokasi, atau server belum di-restart. |
-| `Failed to fetch` saat login | URL Supabase salah atau jaringan tidak bisa menjangkau `supabase.co`. Coba buka `https://namaproject.supabase.co/rest/v1/` di browser. |
-| `relation "public.trades" does not exist` | `schema.sql` belum dijalankan. Jalankan sebelum `migration-2.sql`. |
-| `policy ... already exists` | Script sudah pernah dijalankan. Hapus policy lama atau lewati script. |
-| Upload screenshot gagal (RLS) | Policy storage belum terbentuk atau Anda belum login. |
-| Build Netlify gagal karena *secrets scanning* | Tambahkan variabel `SECRETS_SCAN_OMIT_KEYS` berisi `NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY`. |
-| Build Netlify gagal karena versi Node | Tambahkan variabel `NODE_VERSION` bernilai `20`. |
-
-## Ide pengembangan
-
-- Grafik performa per setup
-- Ekspor ke CSV
-- Impor otomatis dari riwayat broker
-- Perhitungan berbasis pip/lot untuk forex
