@@ -142,8 +142,10 @@ function Auth() {
           <label>Kata sandi<input type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           <div className="row">
             <button className="btn" type="submit" disabled={busy}>Masuk</button>
-            <button className="btn ghost" type="button" disabled={busy} onClick={() => submit("up")}>Daftar akun</button>
-          </div>
+
+            {/* <button className="btn ghost" type="button" disabled={busy} onClick={() => submit("up")}>Daftar akun</button> */}
+          </div><p style={{ color: "var(--mute)", marginTop: 0 }}>Email admin@yamz.com</p>
+          <p style={{ color: "var(--mute)", marginTop: 0 }}>Password: admin@yamz.com</p>
           {msg && <div className="err" role="alert">{msg}</div>}
         </form>
       </div>
