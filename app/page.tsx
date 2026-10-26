@@ -82,6 +82,17 @@ const todayStr = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
+function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function Equity({ values }: { values: number[] }) {
   if (values.length < 2) {
     return (
@@ -111,13 +122,17 @@ function Equity({ values }: { values: number[] }) {
   );
 }
 
-function Calendar({ trades, month, setMonth }: { trades: Trade[]; month: string; setMonth: (m: string) => void }) {
+function Calendar({ trades, month, setMonth, note }: { trades: Trade[]; month: string; setMonth: (m: string) => void; note?: string }) {
   const [y, m] = month.split("-").map(Number);
   const days = new Date(y, m, 0).getDate();
   const offset = (new Date(y, m - 1, 1).getDay() + 6) % 7; // minggu dimulai Senin
   const map: Record<string, number> = {};
+  const cnt: Record<string, number> = {};
   trades.forEach((t) => {
-    if (t.traded_at.startsWith(month)) map[t.traded_at] = (map[t.traded_at] ?? 0) + pnl(t);
+    if (t.traded_at.startsWith(month)) {
+      map[t.traded_at] = (map[t.traded_at] ?? 0) + pnl(t);
+      cnt[t.traded_at] = (cnt[t.traded_at] ?? 0) + 1;
+    }
   });
   const total = Object.values(map).reduce((a, b) => a + b, 0);
   const shift = (d: number) => {
@@ -125,6 +140,112 @@ function Calendar({ trades, month, setMonth }: { trades: Trade[]; month: string;
     setMonth(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`);
   };
   const label = new Date(y, m - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+
+  // Unduh kalender sebagai gambar PNG (latar putih agar rapi saat dibagikan)
+  function downloadPng() {
+    const INK = "#0b1b3a", MUTE = "#5b6b8c", WIN = "#0a8f5a", LOSS = "#d92d48";
+    const W = 1120, pad = 40, gap = 8, scale = 2;
+    const rowsN = Math.ceil((offset + days) / 7);
+    const cw = (W - pad * 2 - gap * 6) / 7, ch = 92, gridTop = 178;
+    const H = gridTop + rowsN * (ch + gap) + 78;
+    const c = document.createElement("canvas");
+    c.width = W * scale;
+    c.height = H * scale;
+    const g = c.getContext("2d");
+    if (!g) return;
+    g.scale(scale, scale);
+    const font = '"Plus Jakarta Sans", Figtree, system-ui, sans-serif';
+    const box = (x: number, y: number, w: number, h: number, r: number) => {
+      g.beginPath();
+      g.moveTo(x + r, y);
+      g.arcTo(x + w, y, x + w, y + h, r);
+      g.arcTo(x + w, y + h, x, y + h, r);
+      g.arcTo(x, y + h, x, y, r);
+      g.arcTo(x, y, x + w, y, r);
+      g.closePath();
+    };
+    const col = (v: number) => (v > 0 ? WIN : v < 0 ? LOSS : INK);
+
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, W, H);
+    g.textBaseline = "alphabetic";
+
+    g.textAlign = "left";
+    g.fillStyle = INK;
+    g.font = `800 32px ${font}`;
+    g.fillText(label.charAt(0).toUpperCase() + label.slice(1), pad, 66);
+    g.font = `800 46px ${font}`;
+    g.fillStyle = col(total);
+    g.fillText(sg(total), pad, 122);
+
+    g.textAlign = "right";
+    g.font = `500 15px ${font}`;
+    g.fillStyle = MUTE;
+    g.fillText("Kalender P&L harian", W - pad, 66);
+    if (note) g.fillText(note, W - pad, 90);
+
+    g.textAlign = "center";
+    g.font = `600 13px ${font}`;
+    ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].forEach((d, i) => {
+      g.fillText(d, pad + i * (cw + gap) + cw / 2, gridTop - 12);
+    });
+
+    for (let i = 0; i < days; i++) {
+      const idx = offset + i;
+      const x = pad + (idx % 7) * (cw + gap);
+      const y = gridTop + Math.floor(idx / 7) * (ch + gap);
+      const key = `${month}-${String(i + 1).padStart(2, "0")}`;
+      const v = map[key];
+      box(x, y, cw, ch, 10);
+      g.fillStyle = v == null ? "#f3f6fb" : v >= 0 ? "rgba(10,143,90,0.14)" : "rgba(217,45,72,0.14)";
+      g.fill();
+      g.strokeStyle = v == null ? "#dbe3f0" : v >= 0 ? "rgba(10,143,90,0.45)" : "rgba(217,45,72,0.45)";
+      g.lineWidth = 1;
+      g.stroke();
+      g.textAlign = "left";
+      g.fillStyle = MUTE;
+      g.font = `600 14px ${font}`;
+      g.fillText(String(i + 1), x + 10, y + 22);
+      if (v != null) {
+        g.textAlign = "center";
+        g.fillStyle = col(v);
+        g.font = `700 17px ${font}`;
+        g.fillText(sg(v), x + cw / 2, y + ch / 2 + 10);
+        g.fillStyle = MUTE;
+        g.font = `500 12px ${font}`;
+        g.fillText(`${cnt[key]} trade`, x + cw / 2, y + ch - 12);
+      }
+    }
+
+    const vals = Object.values(map);
+    const nTrades = Object.values(cnt).reduce((a, b) => a + b, 0);
+    g.textAlign = "left";
+    g.fillStyle = INK;
+    g.font = `600 15px ${font}`;
+    g.fillText(
+      `Hari profit ${vals.filter((v) => v > 0).length}  \u00b7  Hari rugi ${vals.filter((v) => v < 0).length}  \u00b7  ${nTrades} trade`,
+      pad,
+      H - 32
+    );
+    g.textAlign = "right";
+    g.fillStyle = MUTE;
+    g.font = `500 13px ${font}`;
+    g.fillText("Jurnal trading", W - pad, H - 32);
+
+    c.toBlob((b) => { if (b) saveBlob(b, `pnl-kalender-${month}.png`); }, "image/png");
+  }
+
+  // Unduh data harian sebagai CSV (bisa dibuka di Excel/Google Sheets)
+  function downloadCsv() {
+    const keys = Object.keys(map).sort();
+    const lines = [
+      "tanggal,pnl,jumlah_trade",
+      ...keys.map((k) => `${k},${Number(map[k].toFixed(2))},${cnt[k]}`),
+      `TOTAL,${Number(total.toFixed(2))},${Object.values(cnt).reduce((a, b) => a + b, 0)}`,
+    ];
+    saveBlob(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }), `pnl-kalender-${month}.csv`);
+  }
+
   return (
     <section className="panel">
       <div className="cal-head">
@@ -134,6 +255,10 @@ function Calendar({ trades, month, setMonth }: { trades: Trade[]; month: string;
           <span className={cls(total)}><b>{sg(total)}</b></span>
         </div>
         <button className="btn ghost" onClick={() => shift(1)} aria-label="Bulan berikutnya">&rsaquo;</button>
+      </div>
+      <div className="row" style={{ justifyContent: "flex-end", marginBottom: 12 }}>
+        <button className="btn ghost" type="button" onClick={downloadPng}>Unduh gambar (PNG)</button>
+        <button className="btn ghost" type="button" onClick={downloadCsv}>Unduh CSV</button>
       </div>
       <div className="cal">
         {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((d) => <div key={d} className="dow">{d}</div>)}
@@ -182,7 +307,7 @@ function Auth() {
           <div className="row">
             <button className="btn" type="submit" disabled={busy}>Masuk</button>
             <button className="btn ghost" type="button" disabled={busy} onClick={() => submit("up")}>Daftar akun</button>
-            <p>Email & Pass: admin@yamz.com</p>
+            Email & Pass: admin@yamz.com
           </div>
           {msg && <div className="err" role="alert">{msg}</div>}
         </form>
@@ -407,7 +532,12 @@ function Journal({ session }: { session: Session }) {
         <div><b className={cls(s.pipAvg)}>{s.pipCount ? `${sg(s.pipAvg, 1)}` : "\u2013"}</b><small>Rata-rata pips per trade</small></div>
       </section>
 
-      <Calendar trades={shown} month={month} setMonth={setMonth} />
+      <Calendar
+        trades={shown}
+        month={month}
+        setMonth={setMonth}
+        note={[fSym && `Simbol ${fSym}`, fSetup && `Setup ${fSetup}`].filter(Boolean).join(" \u00b7 ")}
+      />
 
       <section className="panel" id="form-panel">
         <h2>{e ? "Edit trade" : "Catat trade"}</h2>
