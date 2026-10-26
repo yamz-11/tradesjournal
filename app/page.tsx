@@ -308,6 +308,7 @@ function Auth() {
             <button className="btn" type="submit" disabled={busy}>Masuk</button>
             {/* <button className="btn ghost" type="button" disabled={busy} onClick={() => submit("up")}>Daftar akun</button> */}
           </div>
+          Email & Pass: admin@yamz.com
           {msg && <div className="err" role="alert">{msg}</div>}
         </form>
       </div>
