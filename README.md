@@ -20,22 +20,6 @@ Aplikasi web sederhana untuk mencatat dan menganalisis trade. Dibangun dengan Ne
 - [Supabase](https://supabase.com): PostgreSQL, Auth, dan Storage
 - CSS biasa (tanpa Tailwind)
 
-## Struktur proyek
-
-```
-app/
-  page.tsx          Halaman utama (login, form, statistik, kalender, tabel)
-  globals.css       Gaya tampilan
-  layout.tsx        Layout bawaan Next.js
-lib/
-  supabase.ts       Klien Supabase
-supabase/
-  schema.sql        Tabel trades + aturan keamanan (jalankan pertama)
-  migration-2.sql   Kolom stop loss/take profit/screenshot + bucket storage (jalankan kedua)
-  migration-3.sql   Kolom ukuran pip dan nilai per pip (jalankan ketiga)
-.env.local.example  Contoh variabel lingkungan
-```
-
 ## Prasyarat
 
 - Node.js 20.9 atau lebih baru (cek dengan `node -v`)
@@ -85,26 +69,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=isi-dengan-publishable-atau-anon-key
 npm run dev
 ```
 
-Buka http://localhost:3000, daftar akun atau login, lalu mulai mencatat trade.
+Buka http://localhost:3000 atau https://yamztrades.netlify.app/, login dengan email dan password, lalu mulai mencatat trade.
 
 > Setiap kali mengubah `.env.local`, hentikan server dengan `Ctrl + C` dan jalankan lagi.
-
-## Deploy ke Netlify
-
-1. Push proyek ke GitHub (pastikan `.env.local` tidak ikut ter-commit).
-2. Di [Netlify](https://app.netlify.com): **Add new project > Import an existing project**, pilih repo Anda. Netlify mengenali Next.js dan mengisi pengaturan build otomatis.
-3. Tambahkan environment variables `NEXT_PUBLIC_SUPABASE_URL` dan `NEXT_PUBLIC_SUPABASE_ANON_KEY` **sebelum** deploy (nilainya ditanam saat build; kalau diubah, deploy ulang).
-4. Klik **Deploy**.
-5. Di Supabase buka **Authentication > URL Configuration**, lalu isi **Site URL** dan **Redirect URLs** dengan alamat Netlify Anda.
-
-Setiap `git push` ke branch `main` akan memicu deploy otomatis.
-
-## Keamanan
-
-- Akses data dijaga oleh **Row Level Security** di database, bukan oleh aplikasi saja. Pengguna hanya bisa membaca dan mengubah baris miliknya.
-- Screenshot disimpan di bucket **privat**. Aplikasi membukanya lewat signed URL sementara, dan file ditaruh di folder dengan nama user ID.
-- Untuk pemakaian pribadi, matikan pendaftaran publik di Supabase (**Authentication > Sign In / Providers**, matikan *Allow new users to sign up*) dan hapus tombol "Daftar akun" di `app/page.tsx`.
-- Gunakan kata sandi yang panjang dan unik.
 
 ## Cara perhitungan
 
@@ -129,8 +96,3 @@ Untuk forex, isi **Nilai per pip** supaya P&L sesuai dengan akun broker. Tanpa i
 | Build Netlify gagal karena *secrets scanning* | Tambahkan variabel `SECRETS_SCAN_OMIT_KEYS` berisi `NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY`. |
 | Build Netlify gagal karena versi Node | Tambahkan variabel `NODE_VERSION` bernilai `20`. |
 
-## Ide pengembangan
-
-- Grafik performa per setup
-- Ekspor ke CSV
-- Impor otomatis dari riwayat broker
