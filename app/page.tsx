@@ -15,19 +15,58 @@ type Trade = {
   fees: number;
   stop_loss: number | null;
   take_profit: number | null;
+  pip_size: number | null;
+  pip_value: number | null;
   setup: string | null;
   notes: string | null;
   screenshot_path: string | null;
 };
 
 const BUCKET = "screenshots";
-const pnl = (t: Trade) =>
-  (t.side === "long" ? t.exit_price - t.entry_price : t.entry_price - t.exit_price) * t.quantity - t.fees;
-// R-multiple: hasil bersih dibagi risiko awal (jarak entry ke stop loss x ukuran)
-const rMult = (t: Trade): number | null => {
+const CCY = new Set(["USD", "EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "SGD", "HKD", "NOK", "SEK", "DKK", "MXN", "ZAR", "TRY", "PLN"]);
+// Ukuran pip otomatis: pasangan mata uang 0.0001 (0.01 jika quote JPY), emas 0.1, perak 0.01.
+// Simbol lain (kripto, indeks, saham) tidak dikenali; isi "Ukuran pip" manual jika perlu.
+const autoPipSize = (symbol: string): number | null => {
+  const s = symbol.toUpperCase().replace(/[^A-Z]/g, "");
+  if (s.startsWith("XAU")) return 0.1;
+  if (s.startsWith("XAG")) return 0.01;
+  if (s.length === 6 && CCY.has(s.slice(0, 3)) && CCY.has(s.slice(3))) return s.slice(3) === "JPY" ? 0.01 : 0.0001;
+  return null;
+};
+const pipSize = (t: Trade) => t.pip_size ?? autoPipSize(t.symbol);
+const dir = (t: Trade) => (t.side === "long" ? 1 : -1);
+// Hasil dalam pips (positif = untung)
+const pipsOf = (t: Trade): number | null => {
+  const ps = pipSize(t);
+  return ps ? (dir(t) * (t.exit_price - t.entry_price)) / ps : null;
+};
+const slPips = (t: Trade): number | null => {
+  const ps = pipSize(t);
+  return ps && t.stop_loss != null ? Math.abs(t.entry_price - t.stop_loss) / ps : null;
+};
+const tpPips = (t: Trade): number | null => {
+  const ps = pipSize(t);
+  return ps && t.take_profit != null ? Math.abs(t.take_profit - t.entry_price) / ps : null;
+};
+// P&L: jika "nilai per pip" diisi, P&L = pips x nilai per pip x lot - biaya.
+// Jika tidak, P&L = selisih harga x ukuran - biaya.
+const pnl = (t: Trade) => {
+  const p = pipsOf(t);
+  const gross =
+    t.pip_value != null && p != null ? p * t.pip_value * t.quantity : dir(t) * (t.exit_price - t.entry_price) * t.quantity;
+  return gross - t.fees;
+};
+// Risiko awal dalam satuan P&L (dasar perhitungan R)
+const riskAmt = (t: Trade): number | null => {
   if (t.stop_loss == null) return null;
-  const risk = Math.abs(t.entry_price - t.stop_loss) * t.quantity;
-  return risk > 0 ? pnl(t) / risk : null;
+  const sp = slPips(t);
+  if (t.pip_value != null && sp != null) return sp * t.pip_value * t.quantity;
+  return Math.abs(t.entry_price - t.stop_loss) * t.quantity;
+};
+// R-multiple: hasil bersih dibagi risiko awal
+const rMult = (t: Trade): number | null => {
+  const risk = riskAmt(t);
+  return risk != null && risk > 0 ? pnl(t) / risk : null;
 };
 // Risk/reward rencana: jarak entry ke take profit dibagi jarak entry ke stop loss
 const rr = (t: Trade): number | null => {
@@ -142,10 +181,9 @@ function Auth() {
           <label>Kata sandi<input type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           <div className="row">
             <button className="btn" type="submit" disabled={busy}>Masuk</button>
-
-            {/* <button className="btn ghost" type="button" disabled={busy} onClick={() => submit("up")}>Daftar akun</button> */}
-          </div><p style={{ color: "var(--mute)", marginTop: 0 }}>Email admin@yamz.com</p>
-          <p style={{ color: "var(--mute)", marginTop: 0 }}>Password: admin@yamz.com</p>
+            <button className="btn ghost" type="button" disabled={busy} onClick={() => submit("up")}>Daftar akun</button>
+            <p>Email & Pass: admin@yamz.com</p>
+          </div>
           {msg && <div className="err" role="alert">{msg}</div>}
         </form>
       </div>
@@ -196,6 +234,8 @@ function Journal({ session }: { session: Session }) {
     const gl = -losses.reduce((a, b) => a + b, 0);
     const rs = shown.map(rMult).filter((r): r is number => r != null);
     const rSum = rs.reduce((a, b) => a + b, 0);
+    const pp = shown.map(pipsOf).filter((x): x is number => x != null);
+    const pipSum = pp.reduce((a, b) => a + b, 0);
     let c = 0;
     return {
       total: ps.reduce((a, b) => a + b, 0),
@@ -207,6 +247,9 @@ function Journal({ session }: { session: Session }) {
       rCount: rs.length,
       rTotal: rSum,
       rAvg: rs.length ? rSum / rs.length : 0,
+      pipCount: pp.length,
+      pipTotal: pipSum,
+      pipAvg: pp.length ? pipSum / pp.length : 0,
       curve: [0, ...ps.map((p) => (c += p))],
     };
   }, [shown]);
@@ -228,6 +271,8 @@ function Journal({ session }: { session: Session }) {
       fees: parseFloat(g("fees")) || 0,
       stop_loss: opt("sl"),
       take_profit: opt("tp"),
+      pip_size: opt("pipsize"),
+      pip_value: opt("pipval"),
       setup: g("setup") || null,
       notes: g("notes") || null,
       screenshot_path: editing?.screenshot_path ?? null,
@@ -245,6 +290,18 @@ function Journal({ session }: { session: Session }) {
     if (row.take_profit != null && (long ? row.take_profit <= row.entry_price : row.take_profit >= row.entry_price)) {
       setErr(`Untuk posisi ${long ? "long" : "short"}, take profit harus ${long ? "di atas" : "di bawah"} harga entry.`);
       return;
+    }
+
+    if (row.pip_size != null && !(row.pip_size > 0)) {
+      setErr("Ukuran pip harus lebih dari 0.");
+      return;
+    }
+    if (row.pip_value != null) {
+      if (!(row.pip_value >= 0)) { setErr("Nilai per pip tidak boleh negatif."); return; }
+      if (!(row.pip_size ?? autoPipSize(row.symbol))) {
+        setErr("Simbol ini tidak dikenali otomatis. Isi juga Ukuran pip untuk memakai nilai per pip.");
+        return;
+      }
     }
 
     setSaving(true);
@@ -346,6 +403,8 @@ function Journal({ session }: { session: Session }) {
         <div><b>{s.avgLoss}</b><small>Rata-rata kalah</small></div>
         <div><b className={cls(s.rTotal)}>{s.rCount ? `${sg(s.rTotal)}R` : "\u2013"}</b><small>Total R</small></div>
         <div><b className={cls(s.rAvg)}>{s.rCount ? `${sg(s.rAvg)}R` : "\u2013"}</b><small>Rata-rata R per trade</small></div>
+        <div><b className={cls(s.pipTotal)}>{s.pipCount ? `${sg(s.pipTotal, 1)}` : "\u2013"}</b><small>Total pips</small></div>
+        <div><b className={cls(s.pipAvg)}>{s.pipCount ? `${sg(s.pipAvg, 1)}` : "\u2013"}</b><small>Rata-rata pips per trade</small></div>
       </section>
 
       <Calendar trades={shown} month={month} setMonth={setMonth} />
@@ -372,6 +431,12 @@ function Journal({ session }: { session: Session }) {
           <label>Stop loss<input type="number" step="any" name="sl" defaultValue={e?.stop_loss ?? ""} placeholder="Untuk hitung R" /></label>
           <label>Take profit<input type="number" step="any" name="tp" defaultValue={e?.take_profit ?? ""} placeholder="Untuk hitung R:R" /></label>
           <label>Biaya (fee/swap)<input type="number" step="any" min="0" name="fees" defaultValue={e?.fees || ""} placeholder="0" /></label>
+          <label>Ukuran pip<input type="number" step="any" min="0" name="pipsize" defaultValue={e?.pip_size ?? ""} placeholder="Otomatis" /></label>
+          <label>Nilai per pip (1 lot)<input type="number" step="any" min="0" name="pipval" defaultValue={e?.pip_value ?? ""} placeholder="Opsional" /></label>
+          <small className="hint wide">
+            Pips dihitung otomatis untuk pasangan mata uang (0.0001, atau 0.01 untuk JPY), XAU (0.1), dan XAG (0.01). Isi &quot;Ukuran pip&quot; untuk simbol lain atau jika broker Anda berbeda.
+            Isi &quot;Nilai per pip&quot; (dalam mata uang akun, per 1 lot, lihat di broker) agar P&amp;L dihitung dari pips x nilai per pip x lot; kosongkan untuk P&amp;L dari selisih harga x ukuran.
+          </small>
           <label>Setup<input name="setup" list="setup-list" placeholder="Breakout, pullback…" defaultValue={e?.setup ?? ""} /></label>
           <datalist id="setup-list">{setups.map((x) => <option key={x} value={x} />)}</datalist>
           <label className="wide">Catatan<input name="notes" placeholder="Alasan masuk, emosi, pelajaran" defaultValue={e?.notes ?? ""} /></label>
@@ -396,12 +461,12 @@ function Journal({ session }: { session: Session }) {
               <tr>
                 <th>Tanggal</th><th>Simbol</th><th>Posisi</th>
                 <th className="r">Entry</th><th className="r">Exit</th><th className="r">Ukuran</th>
-                <th className="r">R:R rencana</th><th className="r">R hasil</th><th className="r">P&amp;L</th><th></th>
+                <th className="r">Pips</th><th className="r">R:R rencana</th><th className="r">R hasil</th><th className="r">P&amp;L</th><th></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((t) => {
-                const p = pnl(t), r = rMult(t), plan = rr(t);
+                const p = pnl(t), r = rMult(t), plan = rr(t), pp = pipsOf(t), sl = slPips(t), tp = tpPips(t);
                 return (
                   <tr key={t.id}>
                     <td>{t.traded_at}</td>
@@ -414,6 +479,14 @@ function Journal({ session }: { session: Session }) {
                     <td className="r">{num(t.entry_price, 5)}</td>
                     <td className="r">{num(t.exit_price, 5)}</td>
                     <td className="r">{num(t.quantity, 4)}</td>
+                    <td className="r">
+                      {pp == null ? "\u2013" : <span className={cls(pp)}>{sg(pp, 1)}</span>}
+                      {(sl != null || tp != null) && (
+                        <div className="note" style={{ maxWidth: "none" }}>
+                          {sl != null ? `SL ${num(sl, 1)}` : ""}{sl != null && tp != null ? " \u00b7 " : ""}{tp != null ? `TP ${num(tp, 1)}` : ""}
+                        </div>
+                      )}
+                    </td>
                     <td className="r">{plan == null ? "\u2013" : `1:${num(plan)}`}</td>
                     <td className={`r ${r == null ? "" : cls(r)}`}>{r == null ? "\u2013" : `${sg(r)}R`}</td>
                     <td className={`r ${cls(p)}`}><b>{sg(p)}</b></td>

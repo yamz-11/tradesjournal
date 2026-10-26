@@ -7,6 +7,7 @@ Aplikasi web sederhana untuk mencatat dan menganalisis trade. Dibangun dengan Ne
 - **Login** dengan email dan kata sandi (Supabase Auth). Setiap pengguna hanya bisa melihat datanya sendiri (Row Level Security).
 - **Catat dan edit trade**: tanggal, simbol, posisi (long/short), harga entry/exit, ukuran, biaya, stop loss, take profit, setup, dan catatan.
 - **Upload screenshot chart** (gambar, maksimal 5 MB) yang tersimpan privat di Supabase Storage.
+- **Perhitungan pips**: hasil, stop loss, dan take profit dalam pips (ukuran pip otomatis untuk forex, emas, dan perak, bisa diatur manual), total dan rata-rata pips, serta P&L berbasis nilai per pip dan lot.
 - **R-multiple dan risk/reward**: R hasil (hasil bersih dibagi risiko awal) serta R:R rencana, lengkap dengan total R dan rata-rata R.
 - **Filter** per simbol dan setup. Statistik, kurva ekuitas, dan kalender ikut terfilter.
 - **Statistik**: total P&L, win rate, profit factor, rata-rata menang/kalah.
@@ -18,6 +19,22 @@ Aplikasi web sederhana untuk mencatat dan menganalisis trade. Dibangun dengan Ne
 - [Next.js](https://nextjs.org) (App Router) dan TypeScript
 - [Supabase](https://supabase.com): PostgreSQL, Auth, dan Storage
 - CSS biasa (tanpa Tailwind)
+
+## Struktur proyek
+
+```
+app/
+  page.tsx          Halaman utama (login, form, statistik, kalender, tabel)
+  globals.css       Gaya tampilan
+  layout.tsx        Layout bawaan Next.js
+lib/
+  supabase.ts       Klien Supabase
+supabase/
+  schema.sql        Tabel trades + aturan keamanan (jalankan pertama)
+  migration-2.sql   Kolom stop loss/take profit/screenshot + bucket storage (jalankan kedua)
+  migration-3.sql   Kolom ukuran pip dan nilai per pip (jalankan ketiga)
+.env.local.example  Contoh variabel lingkungan
+```
 
 ## Prasyarat
 
@@ -40,11 +57,12 @@ npm install
 1. Buat project baru di Supabase.
 2. Buka **SQL Editor** > **New query**, tempel isi `supabase/schema.sql`, lalu **Run**.
 3. Buat query baru, tempel isi `supabase/migration-2.sql`, lalu **Run**.
+4. Buat query baru, tempel isi `supabase/migration-3.sql`, lalu **Run**.
 
-> Urutannya penting: `schema.sql` harus dijalankan lebih dulu karena migrasi menambah kolom ke tabel `trades`.
+> Urutannya penting: `schema.sql` harus dijalankan lebih dulu, lalu `migration-2.sql`, lalu `migration-3.sql`, karena migrasi menambah kolom ke tabel `trades`.
 
 Setelah itu pastikan:
-- Tabel `trades` memiliki kolom `stop_loss`, `take_profit`, dan `screenshot_path`.
+- Tabel `trades` memiliki kolom `stop_loss`, `take_profit`, `screenshot_path`, `pip_size`, dan `pip_value`.
 - Di **Storage** ada bucket privat `screenshots` dengan empat policy berakhiran `_own`.
 
 ### 3. Atur variabel lingkungan
@@ -71,6 +89,16 @@ Buka http://localhost:3000, daftar akun atau login, lalu mulai mencatat trade.
 
 > Setiap kali mengubah `.env.local`, hentikan server dengan `Ctrl + C` dan jalankan lagi.
 
+## Deploy ke Netlify
+
+1. Push proyek ke GitHub (pastikan `.env.local` tidak ikut ter-commit).
+2. Di [Netlify](https://app.netlify.com): **Add new project > Import an existing project**, pilih repo Anda. Netlify mengenali Next.js dan mengisi pengaturan build otomatis.
+3. Tambahkan environment variables `NEXT_PUBLIC_SUPABASE_URL` dan `NEXT_PUBLIC_SUPABASE_ANON_KEY` **sebelum** deploy (nilainya ditanam saat build; kalau diubah, deploy ulang).
+4. Klik **Deploy**.
+5. Di Supabase buka **Authentication > URL Configuration**, lalu isi **Site URL** dan **Redirect URLs** dengan alamat Netlify Anda.
+
+Setiap `git push` ke branch `main` akan memicu deploy otomatis.
+
 ## Keamanan
 
 - Akses data dijaga oleh **Row Level Security** di database, bukan oleh aplikasi saja. Pengguna hanya bisa membaca dan mengubah baris miliknya.
@@ -80,9 +108,29 @@ Buka http://localhost:3000, daftar akun atau login, lalu mulai mencatat trade.
 
 ## Cara perhitungan
 
-- **P&L** = (exit − entry) × ukuran − biaya untuk long, dan (entry − exit) × ukuran − biaya untuk short.
-- **R-multiple** = P&L bersih ÷ (|entry − stop loss| × ukuran). Hanya dihitung jika stop loss diisi.
+- **Pips** = (exit − entry) ÷ ukuran pip untuk long, dan (entry − exit) ÷ ukuran pip untuk short. Ukuran pip otomatis: pasangan mata uang 0.0001 (0.01 jika quote JPY), XAU 0.1, XAG 0.01. Untuk simbol lain (kripto, indeks, saham) atau jika broker Anda memakai definisi berbeda, isi **Ukuran pip** manual.
+- **P&L** (jika **Nilai per pip** diisi) = pips × nilai per pip × lot − biaya. Nilai per pip adalah nilai 1 pip untuk 1 lot dalam mata uang akun; ambil dari broker atau kalkulator pip karena bergantung pada pasangan dan kurs.
+- **P&L** (jika **Nilai per pip** kosong) = (exit − entry) × ukuran − biaya untuk long, dan (entry − exit) × ukuran − biaya untuk short.
+- **R-multiple** = P&L bersih ÷ risiko awal. Risiko awal = jarak stop loss dalam pips × nilai per pip × lot (jika nilai per pip diisi), atau |entry − stop loss| × ukuran. Hanya dihitung jika stop loss diisi.
 - **R:R rencana** = |take profit − entry| ÷ |entry − stop loss|. Hanya dihitung jika stop loss dan take profit diisi.
 - **Profit factor** = total profit ÷ total kerugian.
 
-Perhitungan memakai selisih harga × ukuran. Untuk instrumen yang nilainya bergantung pada ukuran kontrak atau nilai pip (misalnya forex), sesuaikan cara Anda mengisi ukuran agar P&L sesuai dengan akun broker.
+Untuk forex, isi **Nilai per pip** supaya P&L sesuai dengan akun broker. Tanpa itu, P&L hanya selisih harga × ukuran dan tidak memperhitungkan ukuran kontrak.
+
+## Pemecahan masalah
+
+| Masalah | Penyebab dan solusi |
+|---|---|
+| `supabaseUrl is required` | `.env.local` belum ada, salah nama (misalnya `.env.local.txt`), salah lokasi, atau server belum di-restart. |
+| `Failed to fetch` saat login | URL Supabase salah atau jaringan tidak bisa menjangkau `supabase.co`. Coba buka `https://namaproject.supabase.co/rest/v1/` di browser. |
+| `relation "public.trades" does not exist` | `schema.sql` belum dijalankan. Jalankan sebelum `migration-2.sql`. |
+| `policy ... already exists` | Script sudah pernah dijalankan. Hapus policy lama atau lewati script. |
+| Upload screenshot gagal (RLS) | Policy storage belum terbentuk atau Anda belum login. |
+| Build Netlify gagal karena *secrets scanning* | Tambahkan variabel `SECRETS_SCAN_OMIT_KEYS` berisi `NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY`. |
+| Build Netlify gagal karena versi Node | Tambahkan variabel `NODE_VERSION` bernilai `20`. |
+
+## Ide pengembangan
+
+- Grafik performa per setup
+- Ekspor ke CSV
+- Impor otomatis dari riwayat broker
