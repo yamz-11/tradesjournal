@@ -307,7 +307,6 @@ function Auth() {
           <div className="row">
             <button className="btn" type="submit" disabled={busy}>Masuk</button>
             <button className="btn ghost" type="button" disabled={busy} onClick={() => submit("up")}>Daftar akun</button>
-            Email & Pass: admin@yamz.com
           </div>
           {msg && <div className="err" role="alert">{msg}</div>}
         </form>
@@ -599,28 +598,28 @@ function Journal({ session }: { session: Session }) {
                 const p = pnl(t), r = rMult(t), plan = rr(t), pp = pipsOf(t), sl = slPips(t), tp = tpPips(t);
                 return (
                   <tr key={t.id}>
-                    <td>{t.traded_at}</td>
-                    <td>
+                    <td data-label="Tanggal">{t.traded_at}</td>
+                    <td data-label="Simbol" className="c-sym">
                       <div className="sym">{t.symbol}</div>
                       {t.setup && <div className="note">{t.setup}</div>}
                       {t.notes && <div className="note">{t.notes}</div>}
                     </td>
-                    <td><span className={`tag ${t.side}`}>{t.side === "long" ? "Long" : "Short"}</span></td>
-                    <td className="r">{num(t.entry_price, 5)}</td>
-                    <td className="r">{num(t.exit_price, 5)}</td>
-                    <td className="r">{num(t.quantity, 4)}</td>
-                    <td className="r">
+                    <td data-label="Posisi"><span className={`tag ${t.side}`}>{t.side === "long" ? "Long" : "Short"}</span></td>
+                    <td className="r" data-label="Entry">{num(t.entry_price, 5)}</td>
+                    <td className="r" data-label="Exit">{num(t.exit_price, 5)}</td>
+                    <td className="r" data-label="Ukuran">{num(t.quantity, 4)}</td>
+                    <td className="r" data-label="Pips"><div>
                       {pp == null ? "\u2013" : <span className={cls(pp)}>{sg(pp, 1)}</span>}
                       {(sl != null || tp != null) && (
                         <div className="note" style={{ maxWidth: "none" }}>
                           {sl != null ? `SL ${num(sl, 1)}` : ""}{sl != null && tp != null ? " \u00b7 " : ""}{tp != null ? `TP ${num(tp, 1)}` : ""}
                         </div>
                       )}
-                    </td>
-                    <td className="r">{plan == null ? "\u2013" : `1:${num(plan)}`}</td>
-                    <td className={`r ${r == null ? "" : cls(r)}`}>{r == null ? "\u2013" : `${sg(r)}R`}</td>
-                    <td className={`r ${cls(p)}`}><b>{sg(p)}</b></td>
-                    <td className="r" style={{ whiteSpace: "nowrap" }}>
+                    </div></td>
+                    <td className="r" data-label="R:R rencana">{plan == null ? "\u2013" : `1:${num(plan)}`}</td>
+                    <td className={`r ${r == null ? "" : cls(r)}`} data-label="R hasil">{r == null ? "\u2013" : `${sg(r)}R`}</td>
+                    <td className={`r ${cls(p)}`} data-label="P&amp;L"><b>{sg(p)}</b></td>
+                    <td className="r act" style={{ whiteSpace: "nowrap" }}>
                       {t.screenshot_path && <button className="link" onClick={() => openShot(t.screenshot_path!)}>Chart</button>}
                       <button className="link" onClick={() => startEdit(t)}>Edit</button>
                       <button className="x" aria-label="Hapus trade" onClick={() => remove(t)}>
