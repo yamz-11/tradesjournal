@@ -93,32 +93,181 @@ function saveBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function Equity({ values }: { values: number[] }) {
-  if (values.length < 2) {
+function InteractiveChart({
+  trades,
+  values,
+}: {
+  trades: Trade[];
+  values: number[];
+}) {
+  const [tab, setTab] = useState<"equity" | "drawdown">("equity");
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  // Hitung nilai drawdown nominal dari titik puncak (peak)
+  const drawdowns = useMemo(() => {
+    let peak = 0;
+    return values.map((v) => {
+      peak = Math.max(peak, v);
+      return peak - v;
+    });
+  }, [values]);
+
+  const activeValues = tab === "equity" ? values : drawdowns.map((d) => -d);
+
+  if (activeValues.length < 2) {
     return (
       <svg viewBox="0 0 600 150" preserveAspectRatio="none">
         <line x1="0" y1="75" x2="600" y2="75" stroke="currentColor" strokeOpacity=".25" strokeDasharray="4 5" />
       </svg>
     );
   }
-  let mn = Math.min(...values), mx = Math.max(...values);
+
+  const n = activeValues.length;
+  let mn = Math.min(...activeValues), mx = Math.max(...activeValues);
   if (mx === mn) { mx += 1; mn -= 1; }
-  const X = (i: number) => (i / (values.length - 1)) * 600;
-  const Y = (v: number) => 130 - ((v - mn) / (mx - mn)) * 110;
-  const line = values.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
-  const col = values[values.length - 1] >= 0 ? "#4ade9a" : "#ff7a8a";
+  const X = (i: number) => (i / (n - 1)) * 600;
+  const Y = (v: number) => 135 - ((v - mn) / (mx - mn)) * 115;
+  const line = activeValues.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+
+  const lastVal = activeValues[activeValues.length - 1];
+  const col = tab === "drawdown" ? "#ff7a8a" : lastVal >= 0 ? "#4ade9a" : "#ff7a8a";
+
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clientX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clientX / rect.width));
+    const idx = Math.round(ratio * (n - 1));
+    setHoverIndex(idx);
+  };
+
+  const hoveredTrade = hoverIndex != null && hoverIndex > 0 ? trades[hoverIndex - 1] : null;
+  const hoveredVal = hoverIndex != null ? values[hoverIndex] : null;
+  const hoveredDd = hoverIndex != null ? drawdowns[hoverIndex] : null;
+
   return (
-    <svg viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="Kurva ekuitas">
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor={col} stopOpacity=".35" />
-          <stop offset="1" stopColor={col} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <line x1="0" x2="600" y1={Y(0)} y2={Y(0)} stroke="currentColor" strokeOpacity=".25" strokeDasharray="4 5" />
-      <polygon points={`0,150 ${line} 600,150`} fill="url(#g)" />
-      <polyline points={line} fill="none" stroke={col} strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-    </svg>
+    <div>
+      <div className="chart-header">
+        <div className="chart-tabs">
+          <button
+            type="button"
+            className={`chart-tab-btn ${tab === "equity" ? "active" : ""}`}
+            onClick={() => setTab("equity")}
+          >
+            Kurva Ekuitas
+          </button>
+          <button
+            type="button"
+            className={`chart-tab-btn ${tab === "drawdown" ? "active" : ""}`}
+            onClick={() => setTab("drawdown")}
+          >
+            Drawdown
+          </button>
+        </div>
+      </div>
+
+      <div className="interactive-chart-wrap">
+        <svg
+          viewBox="0 0 600 150"
+          preserveAspectRatio="none"
+          className="chart-svg"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => setHoverIndex(null)}
+        >
+          <defs>
+            <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={col} stopOpacity=".38" />
+              <stop offset="1" stopColor={col} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          {/* Garis nol baseline */}
+          <line
+            x1="0"
+            x2="600"
+            y1={Y(0)}
+            y2={Y(0)}
+            stroke="currentColor"
+            strokeOpacity=".28"
+            strokeDasharray="4 5"
+          />
+
+          {/* Area polygon fill */}
+          <polygon points={`0,150 ${line} 600,150`} fill="url(#chartGradient)" />
+
+          {/* Polyline garis grafik */}
+          <polyline
+            points={line}
+            fill="none"
+            stroke={col}
+            strokeWidth="2.5"
+            vectorEffect="non-scaling-stroke"
+            strokeLinejoin="round"
+          />
+
+          {/* Crosshair & titik hover */}
+          {hoverIndex != null && (
+            <>
+              <line
+                x1={X(hoverIndex)}
+                x2={X(hoverIndex)}
+                y1="0"
+                y2="150"
+                stroke="#ffffff"
+                strokeOpacity=".45"
+                strokeDasharray="3 3"
+                vectorEffect="non-scaling-stroke"
+              />
+              <circle
+                cx={X(hoverIndex)}
+                cy={Y(activeValues[hoverIndex])}
+                r="5"
+                fill={col}
+                stroke="#ffffff"
+                strokeWidth="2"
+                vectorEffect="non-scaling-stroke"
+              />
+            </>
+          )}
+        </svg>
+
+        {/* Tooltip mengambang interaktif */}
+        {hoverIndex != null && (
+          <div className="chart-tooltip-floating">
+            {hoverIndex === 0 ? (
+              <div className="row-item">
+                <span className="lbl">Awal Modal</span>
+                <span className="val">0.00</span>
+              </div>
+            ) : (
+              <>
+                <div className="row-item">
+                  <span className="lbl">Trade #{hoverIndex}</span>
+                  <span className="val">{hoveredTrade?.traded_at}</span>
+                </div>
+                {hoveredTrade && (
+                  <div className="row-item">
+                    <span className="lbl">{hoveredTrade.symbol} {hoveredTrade.setup ? `(${hoveredTrade.setup})` : ""}</span>
+                    <span className={`val ${cls(pnl(hoveredTrade))}`}>{sg(pnl(hoveredTrade))}</span>
+                  </div>
+                )}
+                {hoveredVal != null && (
+                  <div className="row-item">
+                    <span className="lbl">Total Ekuitas</span>
+                    <span className={`val ${cls(hoveredVal)}`}>{sg(hoveredVal)}</span>
+                  </div>
+                )}
+                {hoveredDd != null && hoveredDd > 0 && (
+                  <div className="row-item">
+                    <span className="lbl">Drawdown</span>
+                    <span className="val neg">−{num(hoveredDd)}</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -278,7 +427,68 @@ function Calendar({ trades, month, setMonth, note }: { trades: Trade[]; month: s
   );
 }
 
-function Auth() {
+function useTheme() {
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("theme") as "light" | "dark" | null;
+    if (saved === "light" || saved === "dark") {
+      setTheme(saved);
+      document.documentElement.setAttribute("data-theme", saved);
+    } else {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const initial = prefersDark ? "dark" : "light";
+      setTheme(initial);
+      document.documentElement.setAttribute("data-theme", initial);
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      localStorage.setItem("theme", next);
+      document.documentElement.setAttribute("data-theme", next);
+      return next;
+    });
+  }, []);
+
+  return { theme, toggleTheme };
+}
+
+function ThemeToggle({ theme, toggleTheme }: { theme: "light" | "dark"; toggleTheme: () => void }) {
+  return (
+    <button
+      type="button"
+      className="theme-toggle-btn"
+      onClick={toggleTheme}
+      title={theme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
+      aria-label="Ubah tema"
+    >
+      <span className="theme-toggle-icon">
+        {theme === "dark" ? (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="m4.93 4.93 1.41 1.41" />
+            <path d="m17.66 17.66 1.41 1.41" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+            <path d="m6.34 17.66-1.41 1.41" />
+            <path d="m19.07 4.93-1.41 1.41" />
+          </svg>
+        ) : (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+          </svg>
+        )}
+      </span>
+      <span>{theme === "dark" ? "Terang" : "Gelap"}</span>
+    </button>
+  );
+}
+
+function Auth({ theme, toggleTheme }: { theme: "light" | "dark"; toggleTheme: () => void }) {
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -312,6 +522,9 @@ function Auth() {
 
   return (
     <div className="auth-page">
+      <div className="auth-theme-switch">
+        <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+      </div>
       <div className="auth-glow auth-glow-1" />
       <div className="auth-glow auth-glow-2" />
       <div className="auth-grid-bg" />
@@ -319,17 +532,17 @@ function Auth() {
       <div className="auth-container">
         {/* Branding Header */}
         <div className="auth-header">
-          <div className="auth-logo-badge">
+          {/* <div className="auth-logo-badge">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 3v18h18" />
               <path d="m19 9-5 5-4-4-3 3" />
               <circle cx="19" cy="9" r="2" fill="white" />
             </svg>
-          </div>
-          <div className="auth-badge-pill">
+          </div> */}
+          {/* <div className="auth-badge-pill">
             <span className="auth-badge-dot" />
             Platform Jurnal Trading Pro
-          </div>
+          </div> */}
           <h1 className="auth-title">Jurnal Trading</h1>
           <p className="auth-subtitle">
             {mode === "in"
@@ -549,11 +762,55 @@ function Auth() {
           </div>
         </div>
       </div>
-    </div>
+    </div >
   );
 }
 
-function Journal({ session }: { session: Session }) {
+type SortField =
+  | "traded_at"
+  | "symbol"
+  | "side"
+  | "entry_price"
+  | "exit_price"
+  | "quantity"
+  | "pips"
+  | "plan"
+  | "r"
+  | "pnl";
+
+type SortOrder = "asc" | "desc";
+
+type ToastItem = {
+  id: string;
+  text: string;
+  type: "success" | "error" | "info";
+};
+
+function getPageNumbers(current: number, total: number): (number | string)[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages: (number | string)[] = [1];
+  if (current > 3) pages.push("...");
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) {
+    pages.push(i);
+  }
+  if (current < total - 2) pages.push("...");
+  pages.push(total);
+  return pages;
+}
+
+function Journal({
+  session,
+  theme,
+  toggleTheme,
+}: {
+  session: Session;
+  theme: "light" | "dark";
+  toggleTheme: () => void;
+}) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -562,8 +819,64 @@ function Journal({ session }: { session: Session }) {
   const [editing, setEditing] = useState<Trade | null>(null);
   const [fSym, setFSym] = useState("");
   const [fSetup, setFSetup] = useState("");
+  const [fStart, setFStart] = useState("");
+  const [fEnd, setFEnd] = useState("");
+  const [fPreset, setFPreset] = useState<"all" | "today" | "7d" | "30d" | "thisMonth">("all");
   const [month, setMonth] = useState(() => todayStr().slice(0, 7));
   const [shot, setShot] = useState<string | null>(null);
+
+  // Toast notifications
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const addToast = useCallback((text: string, type: "success" | "error" | "info" = "info") => {
+    const id = crypto.randomUUID();
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3500);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  // Sorting & Pagination
+  const [sortField, setSortField] = useState<SortField>("traded_at");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const applyPreset = (preset: "all" | "today" | "7d" | "30d" | "thisMonth") => {
+    setFPreset(preset);
+    setPage(1);
+    const now = new Date();
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    if (preset === "all") {
+      setFStart("");
+      setFEnd("");
+    } else if (preset === "today") {
+      const s = fmt(now);
+      setFStart(s);
+      setFEnd(s);
+    } else if (preset === "7d") {
+      const past = new Date(now);
+      past.setDate(past.getDate() - 6);
+      setFStart(fmt(past));
+      setFEnd(fmt(now));
+    } else if (preset === "30d") {
+      const past = new Date(now);
+      past.setDate(past.getDate() - 29);
+      setFStart(fmt(past));
+      setFEnd(fmt(now));
+    } else if (preset === "thisMonth") {
+      const start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const end = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      setFStart(start);
+      setFEnd(end);
+    }
+  };
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -584,8 +897,15 @@ function Journal({ session }: { session: Session }) {
     [trades]
   );
   const shown = useMemo(
-    () => trades.filter((t) => (!fSym || t.symbol === fSym) && (!fSetup || t.setup === fSetup)),
-    [trades, fSym, fSetup]
+    () =>
+      trades.filter((t) => {
+        if (fSym && t.symbol !== fSym) return false;
+        if (fSetup && t.setup !== fSetup) return false;
+        if (fStart && t.traded_at < fStart) return false;
+        if (fEnd && t.traded_at > fEnd) return false;
+        return true;
+      }),
+    [trades, fSym, fSetup, fStart, fEnd]
   );
 
   const s = useMemo(() => {
@@ -598,7 +918,100 @@ function Journal({ session }: { session: Session }) {
     const rSum = rs.reduce((a, b) => a + b, 0);
     const pp = shown.map(pipsOf).filter((x): x is number => x != null);
     const pipSum = pp.reduce((a, b) => a + b, 0);
+
+    // Equity curve & Max Drawdown
     let c = 0;
+    const curve = [0, ...ps.map((p) => (c += p))];
+    let peak = 0;
+    let maxDd = 0;
+    curve.forEach((v) => {
+      peak = Math.max(peak, v);
+      const dd = peak - v;
+      if (dd > maxDd) maxDd = dd;
+    });
+
+    // Sharpe ratio
+    let sharpe: number | null = null;
+    if (ps.length >= 2) {
+      const mean = ps.reduce((a, b) => a + b, 0) / ps.length;
+      const variance = ps.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (ps.length - 1);
+      const stdDev = Math.sqrt(variance);
+      if (stdDev > 0) {
+        sharpe = (mean / stdDev) * Math.sqrt(Math.min(ps.length, 252));
+      }
+    }
+
+    // Streak tracker
+    let curStreakType: "win" | "loss" | "none" = "none";
+    let curStreakCount = 0;
+    let maxWinStreak = 0;
+    let maxLossStreak = 0;
+    let tempWin = 0;
+    let tempLoss = 0;
+
+    const chronoTrades = [...shown].sort((a, b) => a.traded_at.localeCompare(b.traded_at));
+    for (const t of chronoTrades) {
+      const p = pnl(t);
+      if (p > 0) {
+        tempWin += 1;
+        tempLoss = 0;
+        if (tempWin > maxWinStreak) maxWinStreak = tempWin;
+        curStreakType = "win";
+        curStreakCount = tempWin;
+      } else if (p < 0) {
+        tempLoss += 1;
+        tempWin = 0;
+        if (tempLoss > maxLossStreak) maxLossStreak = tempLoss;
+        curStreakType = "loss";
+        curStreakCount = tempLoss;
+      }
+    }
+
+    // Performa per Setup
+    const setupMap: Record<
+      string,
+      {
+        name: string;
+        count: number;
+        wins: number;
+        losses: number;
+        gw: number;
+        gl: number;
+        totalPnl: number;
+        rVals: number[];
+      }
+    > = {};
+
+    shown.forEach((t) => {
+      const name = t.setup?.trim() || "Tanpa Setup";
+      if (!setupMap[name]) {
+        setupMap[name] = { name, count: 0, wins: 0, losses: 0, gw: 0, gl: 0, totalPnl: 0, rVals: [] };
+      }
+      const item = setupMap[name];
+      const p = pnl(t);
+      const r = rMult(t);
+      item.count += 1;
+      item.totalPnl += p;
+      if (p > 0) {
+        item.wins += 1;
+        item.gw += p;
+      } else if (p < 0) {
+        item.losses += 1;
+        item.gl += -p;
+      }
+      if (r != null) item.rVals.push(r);
+    });
+
+    const setupList = Object.values(setupMap)
+      .map((item) => {
+        const winRate = item.count ? (item.wins / item.count) * 100 : 0;
+        const pf = item.gl > 0 ? item.gw / item.gl : item.gw > 0 ? 999 : 0;
+        const avgR = item.rVals.length ? item.rVals.reduce((a, b) => a + b, 0) / item.rVals.length : null;
+        const avgPnl = item.count ? item.totalPnl / item.count : 0;
+        return { ...item, winRate, pf, avgR, avgPnl };
+      })
+      .sort((a, b) => b.totalPnl - a.totalPnl);
+
     return {
       total: ps.reduce((a, b) => a + b, 0),
       count: ps.length,
@@ -612,7 +1025,14 @@ function Journal({ session }: { session: Session }) {
       pipCount: pp.length,
       pipTotal: pipSum,
       pipAvg: pp.length ? pipSum / pp.length : 0,
-      curve: [0, ...ps.map((p) => (c += p))],
+      curve,
+      maxDrawdown: maxDd,
+      sharpeRatio: sharpe,
+      maxWinStreak,
+      maxLossStreak,
+      curStreakType,
+      curStreakCount,
+      setupList,
     };
   }, [shown]);
 
@@ -641,27 +1061,42 @@ function Journal({ session }: { session: Session }) {
     };
 
     if (![row.entry_price, row.exit_price, row.quantity].every(Number.isFinite) || row.quantity <= 0) {
-      setErr("Harga entry, harga exit, dan ukuran harus diisi (ukuran lebih dari 0).");
+      const m = "Harga entry, harga exit, dan ukuran harus diisi (ukuran lebih dari 0).";
+      setErr(m);
+      addToast(m, "error");
       return;
     }
     const long = row.side === "long";
     if (row.stop_loss != null && (long ? row.stop_loss >= row.entry_price : row.stop_loss <= row.entry_price)) {
-      setErr(`Untuk posisi ${long ? "long" : "short"}, stop loss harus ${long ? "di bawah" : "di atas"} harga entry.`);
+      const m = `Untuk posisi ${long ? "long" : "short"}, stop loss harus ${long ? "di bawah" : "di atas"} harga entry.`;
+      setErr(m);
+      addToast(m, "error");
       return;
     }
     if (row.take_profit != null && (long ? row.take_profit <= row.entry_price : row.take_profit >= row.entry_price)) {
-      setErr(`Untuk posisi ${long ? "long" : "short"}, take profit harus ${long ? "di atas" : "di bawah"} harga entry.`);
+      const m = `Untuk posisi ${long ? "long" : "short"}, take profit harus ${long ? "di atas" : "di bawah"} harga entry.`;
+      setErr(m);
+      addToast(m, "error");
       return;
     }
 
     if (row.pip_size != null && !(row.pip_size > 0)) {
-      setErr("Ukuran pip harus lebih dari 0.");
+      const m = "Ukuran pip harus lebih dari 0.";
+      setErr(m);
+      addToast(m, "error");
       return;
     }
     if (row.pip_value != null) {
-      if (!(row.pip_value >= 0)) { setErr("Nilai per pip tidak boleh negatif."); return; }
+      if (!(row.pip_value >= 0)) {
+        const m = "Nilai per pip tidak boleh negatif.";
+        setErr(m);
+        addToast(m, "error");
+        return;
+      }
       if (!(row.pip_size ?? autoPipSize(row.symbol))) {
-        setErr("Simbol ini tidak dikenali otomatis. Isi juga Ukuran pip untuk memakai nilai per pip.");
+        const m = "Simbol ini tidak dikenali otomatis. Isi juga Ukuran pip untuk memakai nilai per pip.";
+        setErr(m);
+        addToast(m, "error");
         return;
       }
     }
@@ -678,13 +1113,20 @@ function Journal({ session }: { session: Session }) {
     if (file && file.size > 0) {
       if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) {
         setSaving(false);
-        setErr("Screenshot harus berupa gambar dengan ukuran maksimal 5 MB.");
+        const m = "Screenshot harus berupa gambar dengan ukuran maksimal 5 MB.";
+        setErr(m);
+        addToast(m, "error");
         return;
       }
       const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
       const path = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
       const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type });
-      if (up.error) { setSaving(false); setErr(up.error.message); return; }
+      if (up.error) {
+        setSaving(false);
+        setErr(up.error.message);
+        addToast(up.error.message, "error");
+        return;
+      }
       if (row.screenshot_path) await supabase.storage.from(BUCKET).remove([row.screenshot_path]);
       row.screenshot_path = path;
     }
@@ -693,8 +1135,18 @@ function Journal({ session }: { session: Session }) {
       ? await supabase.from("trades").update(row).eq("id", editing.id)
       : await supabase.from("trades").insert(row);
     setSaving(false);
-    if (error) { setErr(error.message); return; }
-    if (editing) setEditing(null); else form.reset();
+    if (error) {
+      setErr(error.message);
+      addToast(error.message, "error");
+      return;
+    }
+    if (editing) {
+      setEditing(null);
+      addToast(`Trade ${row.symbol} berhasil diperbarui!`, "success");
+    } else {
+      form.reset();
+      addToast(`Trade ${row.symbol} berhasil dicatat!`, "success");
+    }
     await load();
   }
 
@@ -702,16 +1154,25 @@ function Journal({ session }: { session: Session }) {
     if (armed !== t.id) { setArmed(t.id); return; }
     const { error } = await supabase.from("trades").delete().eq("id", t.id);
     setArmed(null);
-    if (error) { setErr(error.message); return; }
+    if (error) {
+      setErr(error.message);
+      addToast(error.message, "error");
+      return;
+    }
     if (t.screenshot_path) await supabase.storage.from(BUCKET).remove([t.screenshot_path]);
     if (editing?.id === t.id) setEditing(null);
+    addToast(`Trade ${t.symbol} berhasil dihapus.`, "success");
     await load();
   }
 
   async function openShot(path: string) {
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
-    if (error || !data) setErr(error?.message ?? "Gagal membuka screenshot.");
-    else setShot(data.signedUrl);
+    if (error || !data) {
+      setErr(error?.message ?? "Gagal membuka screenshot.");
+      addToast(error?.message ?? "Gagal membuka screenshot.", "error");
+    } else {
+      setShot(data.signedUrl);
+    }
   }
 
   function startEdit(t: Trade) {
@@ -720,14 +1181,120 @@ function Journal({ session }: { session: Session }) {
     document.getElementById("form-panel")?.scrollIntoView({ behavior: "smooth" });
   }
 
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder(
+        field === "traded_at" || field === "pnl" || field === "pips" || field === "r" ? "desc" : "asc"
+      );
+    }
+    setPage(1);
+  };
+
+  const sortedRows = useMemo(() => {
+    const list = [...shown];
+    list.sort((a, b) => {
+      let valA: number | string = 0;
+      let valB: number | string = 0;
+
+      switch (sortField) {
+        case "traded_at":
+          valA = a.traded_at;
+          valB = b.traded_at;
+          break;
+        case "symbol":
+          valA = a.symbol;
+          valB = b.symbol;
+          break;
+        case "side":
+          valA = a.side;
+          valB = b.side;
+          break;
+        case "entry_price":
+          valA = a.entry_price;
+          valB = b.entry_price;
+          break;
+        case "exit_price":
+          valA = a.exit_price;
+          valB = b.exit_price;
+          break;
+        case "quantity":
+          valA = a.quantity;
+          valB = b.quantity;
+          break;
+        case "pips":
+          valA = pipsOf(a) ?? -99999999;
+          valB = pipsOf(b) ?? -99999999;
+          break;
+        case "plan":
+          valA = rr(a) ?? -99999999;
+          valB = rr(b) ?? -99999999;
+          break;
+        case "r":
+          valA = rMult(a) ?? -99999999;
+          valB = rMult(b) ?? -99999999;
+          break;
+        case "pnl":
+          valA = pnl(a);
+          valB = pnl(b);
+          break;
+      }
+
+      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [shown, sortField, sortOrder]);
+
+  const totalRows = sortedRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalRows);
+  const pagedRows = sortedRows.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  function SortTh({
+    field,
+    label,
+    align = "left",
+  }: {
+    field: SortField;
+    label: string;
+    align?: "left" | "right";
+  }) {
+    const active = sortField === field;
+    return (
+      <th
+        className={`sortable ${align === "right" ? "r" : ""} ${active ? "sort-active" : ""}`}
+        onClick={() => toggleSort(field)}
+        title={`Klik untuk mengurutkan berdasarkan ${label}`}
+      >
+        {label}
+        <span className="sort-indicator">
+          {active ? (sortOrder === "asc" ? "▲" : "▼") : "⇅"}
+        </span>
+      </th>
+    );
+  }
+
   const e = editing;
-  const rows = [...shown].reverse();
+  const isFiltered = Boolean(fSym || fSetup || fStart || fEnd);
 
   return (
     <div className="wrap">
       <header>
         <h1>Jurnal trading</h1>
         <div className="row">
+          <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
           <span>{session.user.email}</span>
           <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Keluar</button>
         </div>
@@ -735,45 +1302,270 @@ function Journal({ session }: { session: Session }) {
 
       <div className="filters">
         <label>Simbol
-          <select value={fSym} onChange={(ev) => setFSym(ev.target.value)}>
+          <select value={fSym} onChange={(ev) => { setFSym(ev.target.value); setPage(1); }}>
             <option value="">Semua simbol</option>
             {symbols.map((x) => <option key={x}>{x}</option>)}
           </select>
         </label>
         <label>Setup
-          <select value={fSetup} onChange={(ev) => setFSetup(ev.target.value)}>
+          <select value={fSetup} onChange={(ev) => { setFSetup(ev.target.value); setPage(1); }}>
             <option value="">Semua setup</option>
             {setups.map((x) => <option key={x}>{x}</option>)}
           </select>
         </label>
-        {(fSym || fSetup) && (
-          <button className="btn ghost" onClick={() => { setFSym(""); setFSetup(""); }}>Reset filter</button>
+        <label className="filter-date">Dari Tanggal
+          <input
+            type="date"
+            value={fStart}
+            onChange={(ev) => {
+              setFStart(ev.target.value);
+              setFPreset("all");
+              setPage(1);
+            }}
+          />
+        </label>
+        <label className="filter-date">Sampai Tanggal
+          <input
+            type="date"
+            value={fEnd}
+            onChange={(ev) => {
+              setFEnd(ev.target.value);
+              setFPreset("all");
+              setPage(1);
+            }}
+          />
+        </label>
+        {isFiltered && (
+          <button
+            className="btn ghost"
+            onClick={() => {
+              setFSym("");
+              setFSetup("");
+              setFStart("");
+              setFEnd("");
+              setFPreset("all");
+              setPage(1);
+            }}
+          >
+            Reset filter
+          </button>
         )}
+
+        <div className="filter-presets">
+          <span className="filter-presets-title">Rentang:</span>
+          <button
+            type="button"
+            className={`filter-preset-btn ${!fStart && !fEnd ? "active" : ""}`}
+            onClick={() => applyPreset("all")}
+          >
+            Semua
+          </button>
+          <button
+            type="button"
+            className={`filter-preset-btn ${fPreset === "today" ? "active" : ""}`}
+            onClick={() => applyPreset("today")}
+          >
+            Hari Ini
+          </button>
+          <button
+            type="button"
+            className={`filter-preset-btn ${fPreset === "7d" ? "active" : ""}`}
+            onClick={() => applyPreset("7d")}
+          >
+            7 Hari
+          </button>
+          <button
+            type="button"
+            className={`filter-preset-btn ${fPreset === "30d" ? "active" : ""}`}
+            onClick={() => applyPreset("30d")}
+          >
+            30 Hari
+          </button>
+          <button
+            type="button"
+            className={`filter-preset-btn ${fPreset === "thisMonth" ? "active" : ""}`}
+            onClick={() => applyPreset("thisMonth")}
+          >
+            Bulan Ini
+          </button>
+        </div>
       </div>
 
-      <section className="hero" aria-label="Ringkasan ekuitas">
-        <div className="lbl">Total profit &amp; loss{(fSym || fSetup) ? " (terfilter)" : ""}</div>
-        <div className={`big ${cls(s.total)}`}>{sg(s.total)}</div>
-        <Equity values={s.curve} />
-      </section>
+      {loading ? (
+        <div className="skeleton skel-hero" />
+      ) : (
+        <section className="hero" aria-label="Ringkasan ekuitas">
+          <div className="lbl">Total profit &amp; loss{isFiltered ? " (terfilter)" : ""}</div>
+          <div className={`big ${cls(s.total)}`}>{sg(s.total)}</div>
+          <InteractiveChart trades={shown} values={s.curve} />
+        </section>
+      )}
 
-      <section className="stats" aria-label="Statistik">
-        <div><b>{s.count}</b><small>Jumlah trade</small></div>
-        <div><b>{s.count ? `${num(s.winRate, 1)}%` : "\u2013"}</b><small>Win rate</small></div>
-        <div><b>{s.count ? s.pf : "\u2013"}</b><small>Profit factor</small></div>
-        <div><b>{s.avgWin}</b><small>Rata-rata menang</small></div>
-        <div><b>{s.avgLoss}</b><small>Rata-rata kalah</small></div>
-        <div><b className={cls(s.rTotal)}>{s.rCount ? `${sg(s.rTotal)}R` : "\u2013"}</b><small>Total R</small></div>
-        <div><b className={cls(s.rAvg)}>{s.rCount ? `${sg(s.rAvg)}R` : "\u2013"}</b><small>Rata-rata R per trade</small></div>
-        <div><b className={cls(s.pipTotal)}>{s.pipCount ? `${sg(s.pipTotal, 1)}` : "\u2013"}</b><small>Total pips</small></div>
-        <div><b className={cls(s.pipAvg)}>{s.pipCount ? `${sg(s.pipAvg, 1)}` : "\u2013"}</b><small>Rata-rata pips per trade</small></div>
-      </section>
+      {loading ? (
+        <div className="skel-stats">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className="skeleton skel-stat" />
+          ))}
+        </div>
+      ) : (
+        <section className="stats" aria-label="Statistik">
+          <div><b>{s.count}</b><small>Jumlah trade</small></div>
+          <div><b>{s.count ? `${num(s.winRate, 1)}%` : "\u2013"}</b><small>Win rate</small></div>
+          <div><b>{s.count ? s.pf : "\u2013"}</b><small>Profit factor</small></div>
+          <div><b>{s.avgWin}</b><small>Rata-rata menang</small></div>
+          <div><b>{s.avgLoss}</b><small>Rata-rata kalah</small></div>
+          <div><b className={cls(s.rTotal)}>{s.rCount ? `${sg(s.rTotal)}R` : "\u2013"}</b><small>Total R</small></div>
+          <div><b className={cls(s.rAvg)}>{s.rCount ? `${sg(s.rAvg)}R` : "\u2013"}</b><small>Rata-rata R per trade</small></div>
+          <div><b className={cls(s.pipTotal)}>{s.pipCount ? `${sg(s.pipTotal, 1)}` : "\u2013"}</b><small>Total pips</small></div>
+          <div><b className={cls(s.pipAvg)}>{s.pipCount ? `${sg(s.pipAvg, 1)}` : "\u2013"}</b><small>Rata-rata pips per trade</small></div>
+        </section>
+      )}
+
+      {/* Kartu Analitik Lanjutan */}
+      {!loading && s.count > 0 && (
+        <div className="analytics-cards" aria-label="Analitik lanjutan">
+          <div className="analytics-card">
+            <div className="card-head">
+              <span className="card-title">Max Drawdown</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--loss)" }}>
+                <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+                <polyline points="17 18 23 18 23 12" />
+              </svg>
+            </div>
+            <div className="card-val neg">
+              {s.maxDrawdown > 0 ? `−${num(s.maxDrawdown)}` : "0.00"}
+            </div>
+            <div className="card-sub">Penurunan terbesar dari puncak</div>
+          </div>
+
+          <div className="analytics-card">
+            <div className="card-head">
+              <span className="card-title">Sharpe Ratio</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}>
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+            </div>
+            <div className={`card-val ${s.sharpeRatio != null ? (s.sharpeRatio >= 1 ? "pos" : s.sharpeRatio < 0 ? "neg" : "") : ""}`}>
+              {s.sharpeRatio != null ? num(s.sharpeRatio, 2) : "–"}
+            </div>
+            <div className="card-sub">
+              {s.sharpeRatio != null
+                ? s.sharpeRatio >= 2
+                  ? "Sangat Baik (≥ 2.0)"
+                  : s.sharpeRatio >= 1
+                  ? "Baik (≥ 1.0)"
+                  : "Risiko Tinggi (< 1.0)"
+                : "Risk-adjusted return"}
+            </div>
+          </div>
+
+          <div className="analytics-card">
+            <div className="card-head">
+              <span className="card-title">Streak Menang</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--win)" }}>
+                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+              </svg>
+            </div>
+            <div className="card-val pos">
+              {s.maxWinStreak} <small style={{ fontSize: 13, fontWeight: 600 }}>trade</small>
+            </div>
+            <div className="card-sub">
+              Saat ini:{" "}
+              {s.curStreakType === "win" ? (
+                <b className="pos">+{s.curStreakCount} Win beruntun</b>
+              ) : s.curStreakType === "loss" ? (
+                <b className="neg">−{s.curStreakCount} Loss beruntun</b>
+              ) : (
+                "–"
+              )}
+            </div>
+          </div>
+
+          <div className="analytics-card">
+            <div className="card-head">
+              <span className="card-title">Streak Kalah</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--loss)" }}>
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <div className="card-val neg">
+              {s.maxLossStreak} <small style={{ fontSize: 13, fontWeight: 600 }}>trade</small>
+            </div>
+            <div className="card-sub">Kekalahan beruntun terpanjang</div>
+          </div>
+        </div>
+      )}
+
+      {/* Performa per Setup */}
+      {!loading && s.setupList && s.setupList.length > 0 && (
+        <section className="panel setup-panel">
+          <div className="table-toolbar">
+            <h2>Performa per Setup</h2>
+            <span className="table-count-badge">
+              <b>{s.setupList.length}</b> setup
+            </span>
+          </div>
+
+          <div className="setup-table-wrap">
+            <table className="setup-table">
+              <thead>
+                <tr>
+                  <th>Nama Setup</th>
+                  <th className="r">Trade</th>
+                  <th className="r">Win Rate</th>
+                  <th className="r">Profit Factor</th>
+                  <th className="r">Rata-rata R</th>
+                  <th className="r">Total P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {s.setupList.map((st) => (
+                  <tr key={st.name}>
+                    <td>
+                      <b>{st.name}</b>
+                    </td>
+                    <td className="r">{st.count}</td>
+                    <td className="r">
+                      <div className="setup-progress">
+                        <span>{num(st.winRate, 1)}%</span>
+                        <div className="setup-bar-track">
+                          <div
+                            className="setup-bar-fill"
+                            style={{
+                              width: `${Math.min(100, Math.max(0, st.winRate))}%`,
+                              backgroundColor: st.winRate >= 50 ? "var(--win)" : "var(--loss)",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="r">{st.pf >= 999 ? "∞" : num(st.pf, 2)}</td>
+                    <td className={`r ${st.avgR != null ? cls(st.avgR) : ""}`}>
+                      {st.avgR != null ? `${sg(st.avgR, 2)}R` : "–"}
+                    </td>
+                    <td className={`r ${cls(st.totalPnl)}`}>
+                      <b>{sg(st.totalPnl)}</b>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <Calendar
         trades={shown}
         month={month}
         setMonth={setMonth}
-        note={[fSym && `Simbol ${fSym}`, fSetup && `Setup ${fSetup}`].filter(Boolean).join(" \u00b7 ")}
+        note={[
+          fSym && `Simbol ${fSym}`,
+          fSetup && `Setup ${fSetup}`,
+          (fStart || fEnd) && `Periode ${fStart || "..."} s/d ${fEnd || "kini"}`,
+        ]
+          .filter(Boolean)
+          .join(" \u00b7 ")}
       />
 
       <section className="panel" id="form-panel">
@@ -821,58 +1613,153 @@ function Journal({ session }: { session: Session }) {
       </section>
 
       <section className="panel">
-        <h2>Riwayat trade</h2>
+        <div className="table-toolbar">
+          <h2>Riwayat trade</h2>
+          <div className="row" style={{ gap: 8 }}>
+            <span className="table-count-badge">
+              <b>{sortedRows.length}</b> trade{isFiltered ? " (terfilter)" : ""}
+            </span>
+          </div>
+        </div>
+
         <div className="tw">
           <table>
             <thead>
               <tr>
-                <th>Tanggal</th><th>Simbol</th><th>Posisi</th>
-                <th className="r">Entry</th><th className="r">Exit</th><th className="r">Ukuran</th>
-                <th className="r">Pips</th><th className="r">R:R rencana</th><th className="r">R hasil</th><th className="r">P&amp;L</th><th></th>
+                <SortTh field="traded_at" label="Tanggal" />
+                <SortTh field="symbol" label="Simbol" />
+                <SortTh field="side" label="Posisi" />
+                <SortTh field="entry_price" label="Entry" align="right" />
+                <SortTh field="exit_price" label="Exit" align="right" />
+                <SortTh field="quantity" label="Ukuran" align="right" />
+                <SortTh field="pips" label="Pips" align="right" />
+                <SortTh field="plan" label="R:R rencana" align="right" />
+                <SortTh field="r" label="R hasil" align="right" />
+                <SortTh field="pnl" label="P&L" align="right" />
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((t) => {
-                const p = pnl(t), r = rMult(t), plan = rr(t), pp = pipsOf(t), sl = slPips(t), tp = tpPips(t);
-                return (
-                  <tr key={t.id}>
-                    <td data-label="Tanggal">{t.traded_at}</td>
-                    <td data-label="Simbol" className="c-sym">
-                      <div className="sym">{t.symbol}</div>
-                      {t.setup && <div className="note">{t.setup}</div>}
-                      {t.notes && <div className="note">{t.notes}</div>}
-                    </td>
-                    <td data-label="Posisi"><span className={`tag ${t.side}`}>{t.side === "long" ? "Long" : "Short"}</span></td>
-                    <td className="r" data-label="Entry">{num(t.entry_price, 5)}</td>
-                    <td className="r" data-label="Exit">{num(t.exit_price, 5)}</td>
-                    <td className="r" data-label="Ukuran">{num(t.quantity, 4)}</td>
-                    <td className="r" data-label="Pips"><div>
-                      {pp == null ? "\u2013" : <span className={cls(pp)}>{sg(pp, 1)}</span>}
-                      {(sl != null || tp != null) && (
-                        <div className="note" style={{ maxWidth: "none" }}>
-                          {sl != null ? `SL ${num(sl, 1)}` : ""}{sl != null && tp != null ? " \u00b7 " : ""}{tp != null ? `TP ${num(tp, 1)}` : ""}
-                        </div>
-                      )}
-                    </div></td>
-                    <td className="r" data-label="R:R rencana">{plan == null ? "\u2013" : `1:${num(plan)}`}</td>
-                    <td className={`r ${r == null ? "" : cls(r)}`} data-label="R hasil">{r == null ? "\u2013" : `${sg(r)}R`}</td>
-                    <td className={`r ${cls(p)}`} data-label="P&amp;L"><b>{sg(p)}</b></td>
-                    <td className="r act" style={{ whiteSpace: "nowrap" }}>
-                      {t.screenshot_path && <button className="link" onClick={() => openShot(t.screenshot_path!)}>Chart</button>}
-                      <button className="link" onClick={() => startEdit(t)}>Edit</button>
-                      <button className="x" aria-label="Hapus trade" onClick={() => remove(t)}>
-                        {armed === t.id ? "Yakin?" : "Hapus"}
-                      </button>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={`skel-${i}`}>
+                    <td colSpan={11} style={{ padding: "10px 12px" }}>
+                      <div className="skeleton skel-table-row" style={{ height: 38, margin: 0 }} />
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              ) : (
+                pagedRows.map((t) => {
+                  const p = pnl(t), r = rMult(t), plan = rr(t), pp = pipsOf(t), sl = slPips(t), tp = tpPips(t);
+                  return (
+                    <tr key={t.id}>
+                      <td data-label="Tanggal">{t.traded_at}</td>
+                      <td data-label="Simbol" className="c-sym">
+                        <div className="sym">{t.symbol}</div>
+                        {t.setup && <div className="note">{t.setup}</div>}
+                        {t.notes && <div className="note">{t.notes}</div>}
+                      </td>
+                      <td data-label="Posisi"><span className={`tag ${t.side}`}>{t.side === "long" ? "Long" : "Short"}</span></td>
+                      <td className="r" data-label="Entry">{num(t.entry_price, 5)}</td>
+                      <td className="r" data-label="Exit">{num(t.exit_price, 5)}</td>
+                      <td className="r" data-label="Ukuran">{num(t.quantity, 4)}</td>
+                      <td className="r" data-label="Pips"><div>
+                        {pp == null ? "\u2013" : <span className={cls(pp)}>{sg(pp, 1)}</span>}
+                        {(sl != null || tp != null) && (
+                          <div className="note" style={{ maxWidth: "none" }}>
+                            {sl != null ? `SL ${num(sl, 1)}` : ""}{sl != null && tp != null ? " \u00b7 " : ""}{tp != null ? `TP ${num(tp, 1)}` : ""}
+                          </div>
+                        )}
+                      </div></td>
+                      <td className="r" data-label="R:R rencana">{plan == null ? "\u2013" : `1:${num(plan)}`}</td>
+                      <td className={`r ${r == null ? "" : cls(r)}`} data-label="R hasil">{r == null ? "\u2013" : `${sg(r)}R`}</td>
+                      <td className={`r ${cls(p)}`} data-label="P&amp;L"><b>{sg(p)}</b></td>
+                      <td className="r act" style={{ whiteSpace: "nowrap" }}>
+                        {t.screenshot_path && <button className="link" onClick={() => openShot(t.screenshot_path!)}>Chart</button>}
+                        <button className="link" onClick={() => startEdit(t)}>Edit</button>
+                        <button className="x" aria-label="Hapus trade" onClick={() => remove(t)}>
+                          {armed === t.id ? "Yakin?" : "Hapus"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
-        {!loading && rows.length === 0 && (
+
+        {!loading && pagedRows.length === 0 && (
           <div className="empty">
             {trades.length ? "Tidak ada trade yang cocok dengan filter." : "Belum ada trade. Isi form di atas untuk mencatat trade pertama Anda."}
+          </div>
+        )}
+
+        {/* Pagination controls */}
+        {!loading && totalRows > 0 && (
+          <div className="pagination">
+            <div className="pagination-info">
+              Menampilkan <b>{startIndex + 1}–{endIndex}</b> dari <b>{totalRows}</b> trade
+            </div>
+
+            <div className="pagination-controls">
+              <button
+                type="button"
+                className="pagination-btn"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                aria-label="Halaman sebelumnya"
+              >
+                &lsaquo;
+              </button>
+
+              {getPageNumbers(currentPage, totalPages).map((p, idx) =>
+                typeof p === "number" ? (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`pagination-btn ${currentPage === p ? "active" : ""}`}
+                    onClick={() => setPage(p)}
+                  >
+                    {p}
+                  </button>
+                ) : (
+                  <span key={`ellipsis-${idx}`} style={{ padding: "0 4px", color: "var(--mute)" }}>
+                    ...
+                  </span>
+                )
+              )}
+
+              <button
+                type="button"
+                className="pagination-btn"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                aria-label="Halaman berikutnya"
+              >
+                &rsaquo;
+              </button>
+            </div>
+
+            <div className="pagination-size">
+              <label>
+                Tampilkan:
+                <select
+                  value={pageSize}
+                  onChange={(ev) => {
+                    setPageSize(Number(ev.target.value));
+                    setPage(1);
+                  }}
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                baris
+              </label>
+            </div>
           </div>
         )}
       </section>
@@ -883,6 +1770,39 @@ function Journal({ session }: { session: Session }) {
           <img src={shot} alt="Screenshot chart" />
         </div>
       )}
+
+      {/* Toast Notifications */}
+      <div className="toast-container" aria-live="polite">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast ${t.type}`} onClick={() => removeToast(t.id)}>
+            <span className="toast-icon">
+              {t.type === "success" && (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+              {t.type === "error" && (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+              {t.type === "info" && (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+            </span>
+            <span className="toast-text">{t.text}</span>
+            <button className="toast-close" onClick={(ev) => { ev.stopPropagation(); removeToast(t.id); }} aria-label="Tutup notifikasi">
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -890,6 +1810,7 @@ function Journal({ session }: { session: Session }) {
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
   const [ready, setReady] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -901,5 +1822,9 @@ export default function Home() {
   }, []);
 
   if (!ready) return null;
-  return session ? <Journal session={session} /> : <Auth />;
+  return session ? (
+    <Journal session={session} theme={theme} toggleTheme={toggleTheme} />
+  ) : (
+    <Auth theme={theme} toggleTheme={toggleTheme} />
+  );
 }
