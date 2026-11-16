@@ -16,7 +16,7 @@ Aplikasi web modern, cepat, dan komprehensif untuk mencatat, menganalisis perfor
 - **Chart Interaktif:**
   - Pilihan tampilan **Kurva Ekuitas (Equity Curve)** vs **Drawdown Curve**.
   - Garis baseline nol, hover tracking crosshair, dan floating tooltip dinamis.
-- **Kalender P&L:** Tampilan kalender bulanan interaktif yang merangkum hasil trade per hari beserta penanda hari untung (hijau) dan rugi (merah).
+- **Kalender P&L Interaktif & Export HD:** Tampilan kalender bulanan yang merangkum hasil trade per hari beserta penanda hari untung (hijau) dan rugi (merah). Dilengkapi fitur **Unduh Gambar PNG HD (Opsi Dark & Light Mode)** dengan tampilan kartu modern, ringkasan 4 metrik bulanan (Net P&L, Win Days Rate, Volume Eksekusi, Best Day), serta opsi ekspor ke format CSV.
 
 ### 2. 📋 Manajemen & Riwayat Trade
 - **Pencatatan Lengkap:** Tanggal, Simbol, Posisi (Long/Short), Harga Entry & Exit, Ukuran (Lot/Unit), Stop Loss, Take Profit, Biaya (Fee/Swap), Ukuran Pip, Nilai Pip, Setup, Catatan, dan Screenshot Chart.

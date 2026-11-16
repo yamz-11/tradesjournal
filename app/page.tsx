@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -290,20 +290,45 @@ function Calendar({ trades, month, setMonth, note }: { trades: Trade[]; month: s
   };
   const label = new Date(y, m - 1, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
 
-  // Unduh kalender sebagai gambar PNG (latar putih agar rapi saat dibagikan)
-  function downloadPng() {
-    const INK = "#0b1b3a", MUTE = "#5b6b8c", WIN = "#0a8f5a", LOSS = "#d92d48";
-    const W = 1120, pad = 40, gap = 8, scale = 2;
+  // Unduh kalender sebagai gambar PNG berkualitas tinggi (Dark / Light modern card)
+  function downloadPng(mode: "dark" | "light" = "dark") {
+    const isDark = mode === "dark";
+    const bgCanvas = isDark ? "#090d16" : "#f8fafc";
+    const bgGradEnd = isDark ? "#0f172a" : "#eef2f6";
+    const cardBg = isDark ? "#131b2e" : "#ffffff";
+    const cardBorder = isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0";
+    const textMain = isDark ? "#f8fafc" : "#0f172a";
+    const textMute = isDark ? "#94a3b8" : "#64748b";
+
+    const winColor = isDark ? "#10b981" : "#059669";
+    const winBg = isDark ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.10)";
+    const winBorder = isDark ? "rgba(16, 185, 129, 0.45)" : "rgba(16, 185, 129, 0.35)";
+
+    const lossColor = isDark ? "#f43f5e" : "#e11d48";
+    const lossBg = isDark ? "rgba(244, 63, 94, 0.15)" : "rgba(244, 63, 94, 0.10)";
+    const lossBorder = isDark ? "rgba(244, 63, 94, 0.45)" : "rgba(244, 63, 94, 0.35)";
+
+    const dowBg = isDark ? "rgba(255, 255, 255, 0.04)" : "#e2e8f0";
+    const dowText = isDark ? "#94a3b8" : "#475569";
+    const cellEmptyBg = isDark ? "rgba(255, 255, 255, 0.02)" : "#ffffff";
+    const cellEmptyBorder = isDark ? "rgba(255, 255, 255, 0.06)" : "#e2e8f0";
+
+    const W = 1220, pad = 44, gap = 8, scale = 2;
     const rowsN = Math.ceil((offset + days) / 7);
-    const cw = (W - pad * 2 - gap * 6) / 7, ch = 92, gridTop = 178;
-    const H = gridTop + rowsN * (ch + gap) + 78;
+    const cw = (W - pad * 2 - gap * 6) / 7;
+    const ch = 96;
+    const gridTop = 268;
+    const H = gridTop + rowsN * (ch + gap) + 68;
+
     const c = document.createElement("canvas");
     c.width = W * scale;
     c.height = H * scale;
     const g = c.getContext("2d");
     if (!g) return;
     g.scale(scale, scale);
-    const font = '"Plus Jakarta Sans", Figtree, system-ui, sans-serif';
+
+    const font = '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
     const box = (x: number, y: number, w: number, h: number, r: number) => {
       g.beginPath();
       g.moveTo(x + r, y);
@@ -313,75 +338,239 @@ function Calendar({ trades, month, setMonth, note }: { trades: Trade[]; month: s
       g.arcTo(x, y, x + w, y, r);
       g.closePath();
     };
-    const col = (v: number) => (v > 0 ? WIN : v < 0 ? LOSS : INK);
 
-    g.fillStyle = "#ffffff";
+    const col = (v: number) => (v > 0 ? winColor : v < 0 ? lossColor : textMain);
+
+    // 1. Background Gradient
+    const bgGrad = g.createLinearGradient(0, 0, 0, H);
+    bgGrad.addColorStop(0, bgCanvas);
+    bgGrad.addColorStop(1, bgGradEnd);
+    g.fillStyle = bgGrad;
     g.fillRect(0, 0, W, H);
-    g.textBaseline = "alphabetic";
 
-    g.textAlign = "left";
-    g.fillStyle = INK;
-    g.font = `800 32px ${font}`;
-    g.fillText(label.charAt(0).toUpperCase() + label.slice(1), pad, 66);
-    g.font = `800 46px ${font}`;
-    g.fillStyle = col(total);
-    g.fillText(sg(total), pad, 122);
+    // Ambient glow di pojok kiri atas untuk dark mode
+    if (isDark) {
+      const glow = g.createRadialGradient(pad, pad, 10, pad + 150, pad + 150, 480);
+      glow.addColorStop(0, "rgba(99, 102, 241, 0.12)");
+      glow.addColorStop(1, "rgba(99, 102, 241, 0)");
+      g.fillStyle = glow;
+      g.fillRect(0, 0, W, H);
+    }
 
-    g.textAlign = "right";
-    g.font = `500 15px ${font}`;
-    g.fillStyle = MUTE;
-    g.fillText("Kalender P&L harian", W - pad, 66);
-    if (note) g.fillText(note, W - pad, 90);
+    // Outer card border
+    box(16, 16, W - 32, H - 32, 16);
+    g.strokeStyle = cardBorder;
+    g.lineWidth = 1;
+    g.stroke();
+
+    // 2. Header Area
+    // Branding Pill
+    box(pad, pad, 190, 26, 6);
+    g.fillStyle = isDark ? "rgba(99, 102, 241, 0.20)" : "rgba(99, 102, 241, 0.10)";
+    g.fill();
+    g.strokeStyle = "rgba(99, 102, 241, 0.45)";
+    g.lineWidth = 1;
+    g.stroke();
 
     g.textAlign = "center";
-    g.font = `600 13px ${font}`;
-    ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].forEach((d, i) => {
-      g.fillText(d, pad + i * (cw + gap) + cw / 2, gridTop - 12);
+    g.fillStyle = isDark ? "#818cf8" : "#4f46e5";
+    g.font = `700 11.5px ${font}`;
+    g.fillText("📈 TRADE JOURNAL • P&L", pad + 95, pad + 17);
+
+    // Month Label
+    g.textAlign = "left";
+    g.fillStyle = textMain;
+    g.font = `800 32px ${font}`;
+    g.fillText(label.charAt(0).toUpperCase() + label.slice(1), pad, pad + 66);
+
+    // Header Right
+    g.textAlign = "right";
+    g.font = `600 14px ${font}`;
+    g.fillStyle = textMute;
+    g.fillText("Kalender Performa Bulanan", W - pad, pad + 24);
+    if (note) {
+      g.font = `500 13px ${font}`;
+      g.fillText(note, W - pad, pad + 48);
+    }
+
+    // 3. Stats Cards Bar (4 kartu metrik modern)
+    const vals = Object.values(map);
+    const profitDays = vals.filter((v) => v > 0).length;
+    const lossDays = vals.filter((v) => v < 0).length;
+    const activeDays = profitDays + lossDays;
+    const winDayRate = activeDays > 0 ? (profitDays / activeDays) * 100 : 0;
+    const nTrades = Object.values(cnt).reduce((a, b) => a + b, 0);
+
+    type BestDayInfo = { date: string; pnl: number };
+    let bestDay: BestDayInfo | null = null;
+    for (const [d, p] of Object.entries(map)) {
+      if (!bestDay || p > bestDay.pnl) {
+        bestDay = { date: d, pnl: p };
+      }
+    }
+
+    const bestPnlVal = bestDay ? sg(bestDay.pnl) : "–";
+    const bestCol = bestDay && bestDay.pnl > 0 ? winColor : textMain;
+    const bestSub = bestDay ? `Tgl ${bestDay.date.slice(-2)} (${cnt[bestDay.date] ?? 0} trade)` : "Belum ada trade";
+
+    const cardsY = pad + 82;
+    const cardsH = 72;
+    const cardW = (W - pad * 2 - 12 * 3) / 4;
+
+    const summaryCards = [
+      {
+        title: "NET P&L BULAN INI",
+        val: sg(total),
+        col: col(total),
+        sub: total > 0 ? "Akumulasi profit" : total < 0 ? "Akumulasi kerugian" : "Break-even",
+      },
+      {
+        title: "WIN DAYS RATE",
+        val: `${num(winDayRate, 1)}%`,
+        col: winDayRate >= 50 ? winColor : lossColor,
+        sub: `${profitDays} Hari Win \u00b7 ${lossDays} Hari Loss`,
+      },
+      {
+        title: "VOLUME EKSEKUSI",
+        val: `${nTrades} Trade`,
+        col: textMain,
+        sub: `${activeDays} hari aktif trading`,
+      },
+      {
+        title: "HARI TERBAIK",
+        val: bestPnlVal,
+        col: bestCol,
+        sub: bestSub,
+      },
+    ];
+
+    summaryCards.forEach((cItem, idx) => {
+      const cx = pad + idx * (cardW + 12);
+      box(cx, cardsY, cardW, cardsH, 10);
+      g.fillStyle = cardBg;
+      g.fill();
+      g.strokeStyle = cardBorder;
+      g.lineWidth = 1;
+      g.stroke();
+
+      g.textAlign = "left";
+      g.fillStyle = textMute;
+      g.font = `700 10.5px ${font}`;
+      g.fillText(cItem.title, cx + 14, cardsY + 20);
+
+      g.fillStyle = cItem.col;
+      g.font = `800 20px ${font}`;
+      g.fillText(cItem.val, cx + 14, cardsY + 44);
+
+      g.fillStyle = textMute;
+      g.font = `500 11px ${font}`;
+      g.fillText(cItem.sub, cx + 14, cardsY + 62);
     });
 
+    // 4. Day of Week Header Bar
+    const dowY = gridTop - 34;
+    const dowH = 26;
+    ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].forEach((d, i) => {
+      const dx = pad + i * (cw + gap);
+      box(dx, dowY, cw, dowH, 6);
+      g.fillStyle = dowBg;
+      g.fill();
+
+      g.textAlign = "center";
+      g.fillStyle = dowText;
+      g.font = `700 12px ${font}`;
+      g.fillText(d, dx + cw / 2, dowY + 18);
+    });
+
+    // 5. Grid Cells Kalender
     for (let i = 0; i < days; i++) {
       const idx = offset + i;
       const x = pad + (idx % 7) * (cw + gap);
       const y = gridTop + Math.floor(idx / 7) * (ch + gap);
       const key = `${month}-${String(i + 1).padStart(2, "0")}`;
       const v = map[key];
+
       box(x, y, cw, ch, 10);
-      g.fillStyle = v == null ? "#f3f6fb" : v >= 0 ? "rgba(10,143,90,0.14)" : "rgba(217,45,72,0.14)";
+      g.fillStyle = v == null ? cellEmptyBg : v >= 0 ? winBg : lossBg;
       g.fill();
-      g.strokeStyle = v == null ? "#dbe3f0" : v >= 0 ? "rgba(10,143,90,0.45)" : "rgba(217,45,72,0.45)";
-      g.lineWidth = 1;
+      g.strokeStyle = v == null ? cellEmptyBorder : v >= 0 ? winBorder : lossBorder;
+      g.lineWidth = v == null ? 1 : 1.5;
       g.stroke();
+
+      // Tanggal Badge
       g.textAlign = "left";
-      g.fillStyle = MUTE;
-      g.font = `600 14px ${font}`;
-      g.fillText(String(i + 1), x + 10, y + 22);
+      g.font = `700 13px ${font}`;
+      g.fillStyle = v == null ? textMute : textMain;
+      g.fillText(String(i + 1), x + 12, y + 22);
+
       if (v != null) {
+        // P&L Text di tengah
         g.textAlign = "center";
         g.fillStyle = col(v);
-        g.font = `700 17px ${font}`;
-        g.fillText(sg(v), x + cw / 2, y + ch / 2 + 10);
-        g.fillStyle = MUTE;
-        g.font = `500 12px ${font}`;
-        g.fillText(`${cnt[key]} trade`, x + cw / 2, y + ch - 12);
+        g.font = `800 17px ${font}`;
+        g.fillText(sg(v), x + cw / 2, y + ch / 2 + 7);
+
+        // Trade count pill di bawah
+        const pillW = 64, pillH = 18;
+        const pillX = x + (cw - pillW) / 2;
+        const pillY = y + ch - 26;
+        box(pillX, pillY, pillW, pillH, 99);
+        g.fillStyle = isDark ? "rgba(0, 0, 0, 0.35)" : "rgba(255, 255, 255, 0.75)";
+        g.fill();
+        g.strokeStyle = v >= 0 ? winBorder : lossBorder;
+        g.lineWidth = 1;
+        g.stroke();
+
+        g.textAlign = "center";
+        g.fillStyle = isDark ? "#e2e8f0" : "#334155";
+        g.font = `600 11px ${font}`;
+        g.fillText(`${cnt[key]} trade`, x + cw / 2, pillY + 13);
       }
     }
 
-    const vals = Object.values(map);
-    const nTrades = Object.values(cnt).reduce((a, b) => a + b, 0);
+    // 6. Footer Area
+    const footerY = H - 28;
     g.textAlign = "left";
-    g.fillStyle = INK;
-    g.font = `600 15px ${font}`;
-    g.fillText(
-      `Hari profit ${vals.filter((v) => v > 0).length}  \u00b7  Hari rugi ${vals.filter((v) => v < 0).length}  \u00b7  ${nTrades} trade`,
-      pad,
-      H - 32
-    );
-    g.textAlign = "right";
-    g.fillStyle = MUTE;
-    g.font = `500 13px ${font}`;
-    g.fillText("Jurnal trading", W - pad, H - 32);
+    g.fillStyle = textMute;
+    g.font = `600 13px ${font}`;
 
-    c.toBlob((b) => { if (b) saveBlob(b, `pnl-kalender-${month}.png`); }, "image/png");
+    // Mini status dots
+    g.beginPath();
+    g.arc(pad + 6, footerY - 4, 4, 0, Math.PI * 2);
+    g.fillStyle = winColor;
+    g.fill();
+
+    g.fillStyle = textMute;
+    g.fillText(`Hari Profit: ${profitDays}`, pad + 16, footerY);
+
+    g.beginPath();
+    g.arc(pad + 135, footerY - 4, 4, 0, Math.PI * 2);
+    g.fillStyle = lossColor;
+    g.fill();
+
+    g.fillStyle = textMute;
+    g.fillText(`Hari Rugi: ${lossDays}`, pad + 145, footerY);
+
+    g.beginPath();
+    g.arc(pad + 250, footerY - 4, 4, 0, Math.PI * 2);
+    g.fillStyle = textMute;
+    g.fill();
+
+    g.fillStyle = textMute;
+    g.fillText(`Hari Libur/Flat: ${days - activeDays}`, pad + 260, footerY);
+
+    // Watermark kanan
+    g.textAlign = "right";
+    g.fillStyle = textMute;
+    g.font = `500 12.5px ${font}`;
+    g.fillText("Trade Journal \u2022 Disiplin & Evaluasi Trading", W - pad, footerY);
+
+    c.toBlob(
+      (b) => {
+        if (b) saveBlob(b, `pnl-kalender-${month}-${mode}.png`);
+      },
+      "image/png"
+    );
   }
 
   // Unduh data harian sebagai CSV (bisa dibuka di Excel/Google Sheets)
@@ -405,9 +594,26 @@ function Calendar({ trades, month, setMonth, note }: { trades: Trade[]; month: s
         </div>
         <button className="btn ghost" onClick={() => shift(1)} aria-label="Bulan berikutnya">&rsaquo;</button>
       </div>
-      <div className="row" style={{ justifyContent: "flex-end", marginBottom: 12 }}>
-        <button className="btn ghost" type="button" onClick={downloadPng}>Unduh gambar (PNG)</button>
-        <button className="btn ghost" type="button" onClick={downloadCsv}>Unduh CSV</button>
+      <div className="row" style={{ justifyContent: "flex-end", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+        <button className="btn ghost" type="button" onClick={() => downloadPng("dark")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Unduh PNG (Dark)
+        </button>
+        <button className="btn ghost" type="button" onClick={() => downloadPng("light")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Unduh PNG (Light)
+        </button>
+        <button className="btn ghost" type="button" onClick={downloadCsv}>
+          Unduh CSV
+        </button>
       </div>
       <div className="cal">
         {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((d) => <div key={d} className="dow">{d}</div>)}
@@ -483,7 +689,7 @@ function ThemeToggle({ theme, toggleTheme }: { theme: "light" | "dark"; toggleTh
           </svg>
         )}
       </span>
-      <span>{theme === "dark" ? "Terang" : "Gelap"}</span>
+      <span>{theme === "dark"}</span>
     </button>
   );
 }
@@ -963,10 +1169,10 @@ function Journal({
         localStorage.setItem("cache_daily_journals", JSON.stringify(data));
         return;
       }
-    } catch {}
+    } catch { }
     const cached = localStorage.getItem("cache_daily_journals");
     if (cached) {
-      try { setDailyJournals(JSON.parse(cached)); } catch {}
+      try { setDailyJournals(JSON.parse(cached)); } catch { }
     }
   }, []);
 
@@ -981,10 +1187,10 @@ function Journal({
         localStorage.setItem("cache_weekly_reviews", JSON.stringify(data));
         return;
       }
-    } catch {}
+    } catch { }
     const cached = localStorage.getItem("cache_weekly_reviews");
     if (cached) {
-      try { setWeeklyReviews(JSON.parse(cached)); } catch {}
+      try { setWeeklyReviews(JSON.parse(cached)); } catch { }
     }
   }, []);
 
@@ -1029,7 +1235,7 @@ function Journal({
         .from("daily_journals")
         .upsert(row, { onConflict: "user_id,entry_date" });
       if (!error) savedDb = true;
-    } catch {}
+    } catch { }
 
     setDailyJournals((prev) => {
       const filtered = prev.filter((item) => item.entry_date !== dailyDate && item.id !== id);
@@ -1064,7 +1270,7 @@ function Journal({
   async function removeDaily(id: string, date: string) {
     try {
       await supabase.from("daily_journals").delete().eq("id", id);
-    } catch {}
+    } catch { }
     setDailyJournals((prev) => {
       const updated = prev.filter((item) => item.id !== id);
       localStorage.setItem("cache_daily_journals", JSON.stringify(updated));
@@ -1095,7 +1301,7 @@ function Journal({
         .from("weekly_reviews")
         .upsert(row, { onConflict: "user_id,week_start" });
       if (!error) savedDb = true;
-    } catch {}
+    } catch { }
 
     setWeeklyReviews((prev) => {
       const filtered = prev.filter((w) => w.week_start !== activeWeekStart && w.id !== id);
@@ -1116,7 +1322,7 @@ function Journal({
   async function removeWeekly(id: string, weekStart: string) {
     try {
       await supabase.from("weekly_reviews").delete().eq("id", id);
-    } catch {}
+    } catch { }
     setWeeklyReviews((prev) => {
       const updated = prev.filter((item) => item.id !== id);
       localStorage.setItem("cache_weekly_reviews", JSON.stringify(updated));
@@ -1610,470 +1816,470 @@ function Journal({
       {view === "trades" && (
         <>
 
-      <div className="filters">
-        <label>Simbol
-          <select value={fSym} onChange={(ev) => { setFSym(ev.target.value); setPage(1); }}>
-            <option value="">Semua simbol</option>
-            {symbols.map((x) => <option key={x}>{x}</option>)}
-          </select>
-        </label>
-        <label>Setup
-          <select value={fSetup} onChange={(ev) => { setFSetup(ev.target.value); setPage(1); }}>
-            <option value="">Semua setup</option>
-            {setups.map((x) => <option key={x}>{x}</option>)}
-          </select>
-        </label>
-        <label className="filter-date">Dari Tanggal
-          <input
-            type="date"
-            value={fStart}
-            onChange={(ev) => {
-              setFStart(ev.target.value);
-              setFPreset("all");
-              setPage(1);
-            }}
-          />
-        </label>
-        <label className="filter-date">Sampai Tanggal
-          <input
-            type="date"
-            value={fEnd}
-            onChange={(ev) => {
-              setFEnd(ev.target.value);
-              setFPreset("all");
-              setPage(1);
-            }}
-          />
-        </label>
-        {isFiltered && (
-          <button
-            className="btn ghost"
-            onClick={() => {
-              setFSym("");
-              setFSetup("");
-              setFStart("");
-              setFEnd("");
-              setFPreset("all");
-              setPage(1);
-            }}
-          >
-            Reset filter
-          </button>
-        )}
+          <div className="filters">
+            <label>Simbol
+              <select value={fSym} onChange={(ev) => { setFSym(ev.target.value); setPage(1); }}>
+                <option value="">Semua simbol</option>
+                {symbols.map((x) => <option key={x}>{x}</option>)}
+              </select>
+            </label>
+            <label>Setup
+              <select value={fSetup} onChange={(ev) => { setFSetup(ev.target.value); setPage(1); }}>
+                <option value="">Semua setup</option>
+                {setups.map((x) => <option key={x}>{x}</option>)}
+              </select>
+            </label>
+            <label className="filter-date">Dari Tanggal
+              <input
+                type="date"
+                value={fStart}
+                onChange={(ev) => {
+                  setFStart(ev.target.value);
+                  setFPreset("all");
+                  setPage(1);
+                }}
+              />
+            </label>
+            <label className="filter-date">Sampai Tanggal
+              <input
+                type="date"
+                value={fEnd}
+                onChange={(ev) => {
+                  setFEnd(ev.target.value);
+                  setFPreset("all");
+                  setPage(1);
+                }}
+              />
+            </label>
+            {isFiltered && (
+              <button
+                className="btn ghost"
+                onClick={() => {
+                  setFSym("");
+                  setFSetup("");
+                  setFStart("");
+                  setFEnd("");
+                  setFPreset("all");
+                  setPage(1);
+                }}
+              >
+                Reset filter
+              </button>
+            )}
 
-        <div className="filter-presets">
-          <span className="filter-presets-title">Rentang:</span>
-          <button
-            type="button"
-            className={`filter-preset-btn ${!fStart && !fEnd ? "active" : ""}`}
-            onClick={() => applyPreset("all")}
-          >
-            Semua
-          </button>
-          <button
-            type="button"
-            className={`filter-preset-btn ${fPreset === "today" ? "active" : ""}`}
-            onClick={() => applyPreset("today")}
-          >
-            Hari Ini
-          </button>
-          <button
-            type="button"
-            className={`filter-preset-btn ${fPreset === "7d" ? "active" : ""}`}
-            onClick={() => applyPreset("7d")}
-          >
-            7 Hari
-          </button>
-          <button
-            type="button"
-            className={`filter-preset-btn ${fPreset === "30d" ? "active" : ""}`}
-            onClick={() => applyPreset("30d")}
-          >
-            30 Hari
-          </button>
-          <button
-            type="button"
-            className={`filter-preset-btn ${fPreset === "thisMonth" ? "active" : ""}`}
-            onClick={() => applyPreset("thisMonth")}
-          >
-            Bulan Ini
-          </button>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="skeleton skel-hero" />
-      ) : (
-        <section className="hero" aria-label="Ringkasan ekuitas">
-          <div className="lbl">Total profit &amp; loss{isFiltered ? " (terfilter)" : ""}</div>
-          <div className={`big ${cls(s.total)}`}>{sg(s.total)}</div>
-          <InteractiveChart trades={shown} values={s.curve} />
-        </section>
-      )}
-
-      {loading ? (
-        <div className="skel-stats">
-          {Array.from({ length: 9 }).map((_, i) => (
-            <div key={i} className="skeleton skel-stat" />
-          ))}
-        </div>
-      ) : (
-        <section className="stats" aria-label="Statistik">
-          <div><b>{s.count}</b><small>Jumlah trade</small></div>
-          <div><b>{s.count ? `${num(s.winRate, 1)}%` : "\u2013"}</b><small>Win rate</small></div>
-          <div><b>{s.count ? s.pf : "\u2013"}</b><small>Profit factor</small></div>
-          <div><b>{s.avgWin}</b><small>Rata-rata menang</small></div>
-          <div><b>{s.avgLoss}</b><small>Rata-rata kalah</small></div>
-          <div><b className={cls(s.rTotal)}>{s.rCount ? `${sg(s.rTotal)}R` : "\u2013"}</b><small>Total R</small></div>
-          <div><b className={cls(s.rAvg)}>{s.rCount ? `${sg(s.rAvg)}R` : "\u2013"}</b><small>Rata-rata R per trade</small></div>
-          <div><b className={cls(s.pipTotal)}>{s.pipCount ? `${sg(s.pipTotal, 1)}` : "\u2013"}</b><small>Total pips</small></div>
-          <div><b className={cls(s.pipAvg)}>{s.pipCount ? `${sg(s.pipAvg, 1)}` : "\u2013"}</b><small>Rata-rata pips per trade</small></div>
-        </section>
-      )}
-
-      {/* Kartu Analitik Lanjutan */}
-      {!loading && s.count > 0 && (
-        <div className="analytics-cards" aria-label="Analitik lanjutan">
-          <div className="analytics-card">
-            <div className="card-head">
-              <span className="card-title">Max Drawdown</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--loss)" }}>
-                <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
-                <polyline points="17 18 23 18 23 12" />
-              </svg>
-            </div>
-            <div className="card-val neg">
-              {s.maxDrawdown > 0 ? `−${num(s.maxDrawdown)}` : "0.00"}
-            </div>
-            <div className="card-sub">Penurunan terbesar dari puncak</div>
-          </div>
-
-          <div className="analytics-card">
-            <div className="card-head">
-              <span className="card-title">Sharpe Ratio</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}>
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 6v6l4 2" />
-              </svg>
-            </div>
-            <div className={`card-val ${s.sharpeRatio != null ? (s.sharpeRatio >= 1 ? "pos" : s.sharpeRatio < 0 ? "neg" : "") : ""}`}>
-              {s.sharpeRatio != null ? num(s.sharpeRatio, 2) : "–"}
-            </div>
-            <div className="card-sub">
-              {s.sharpeRatio != null
-                ? s.sharpeRatio >= 2
-                  ? "Sangat Baik (≥ 2.0)"
-                  : s.sharpeRatio >= 1
-                  ? "Baik (≥ 1.0)"
-                  : "Risiko Tinggi (< 1.0)"
-                : "Risk-adjusted return"}
+            <div className="filter-presets">
+              <span className="filter-presets-title">Rentang:</span>
+              <button
+                type="button"
+                className={`filter-preset-btn ${!fStart && !fEnd ? "active" : ""}`}
+                onClick={() => applyPreset("all")}
+              >
+                Semua
+              </button>
+              <button
+                type="button"
+                className={`filter-preset-btn ${fPreset === "today" ? "active" : ""}`}
+                onClick={() => applyPreset("today")}
+              >
+                Hari Ini
+              </button>
+              <button
+                type="button"
+                className={`filter-preset-btn ${fPreset === "7d" ? "active" : ""}`}
+                onClick={() => applyPreset("7d")}
+              >
+                7 Hari
+              </button>
+              <button
+                type="button"
+                className={`filter-preset-btn ${fPreset === "30d" ? "active" : ""}`}
+                onClick={() => applyPreset("30d")}
+              >
+                30 Hari
+              </button>
+              <button
+                type="button"
+                className={`filter-preset-btn ${fPreset === "thisMonth" ? "active" : ""}`}
+                onClick={() => applyPreset("thisMonth")}
+              >
+                Bulan Ini
+              </button>
             </div>
           </div>
 
-          <div className="analytics-card">
-            <div className="card-head">
-              <span className="card-title">Streak Menang</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--win)" }}>
-                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-              </svg>
-            </div>
-            <div className="card-val pos">
-              {s.maxWinStreak} <small style={{ fontSize: 13, fontWeight: 600 }}>trade</small>
-            </div>
-            <div className="card-sub">
-              Saat ini:{" "}
-              {s.curStreakType === "win" ? (
-                <b className="pos">+{s.curStreakCount} Win beruntun</b>
-              ) : s.curStreakType === "loss" ? (
-                <b className="neg">−{s.curStreakCount} Loss beruntun</b>
-              ) : (
-                "–"
-              )}
-            </div>
-          </div>
-
-          <div className="analytics-card">
-            <div className="card-head">
-              <span className="card-title">Streak Kalah</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--loss)" }}>
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-            </div>
-            <div className="card-val neg">
-              {s.maxLossStreak} <small style={{ fontSize: 13, fontWeight: 600 }}>trade</small>
-            </div>
-            <div className="card-sub">Kekalahan beruntun terpanjang</div>
-          </div>
-        </div>
-      )}
-
-      {/* Performa per Setup */}
-      {!loading && s.setupList && s.setupList.length > 0 && (
-        <section className="panel setup-panel">
-          <div className="table-toolbar">
-            <h2>Performa per Setup</h2>
-            <span className="table-count-badge">
-              <b>{s.setupList.length}</b> setup
-            </span>
-          </div>
-
-          <div className="setup-table-wrap">
-            <table className="setup-table">
-              <thead>
-                <tr>
-                  <th>Nama Setup</th>
-                  <th className="r">Trade</th>
-                  <th className="r">Win Rate</th>
-                  <th className="r">Profit Factor</th>
-                  <th className="r">Rata-rata R</th>
-                  <th className="r">Total P&amp;L</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.setupList.map((st) => (
-                  <tr key={st.name}>
-                    <td>
-                      <b>{st.name}</b>
-                    </td>
-                    <td className="r">{st.count}</td>
-                    <td className="r">
-                      <div className="setup-progress">
-                        <span>{num(st.winRate, 1)}%</span>
-                        <div className="setup-bar-track">
-                          <div
-                            className="setup-bar-fill"
-                            style={{
-                              width: `${Math.min(100, Math.max(0, st.winRate))}%`,
-                              backgroundColor: st.winRate >= 50 ? "var(--win)" : "var(--loss)",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </td>
-                    <td className="r">{st.pf >= 999 ? "∞" : num(st.pf, 2)}</td>
-                    <td className={`r ${st.avgR != null ? cls(st.avgR) : ""}`}>
-                      {st.avgR != null ? `${sg(st.avgR, 2)}R` : "–"}
-                    </td>
-                    <td className={`r ${cls(st.totalPnl)}`}>
-                      <b>{sg(st.totalPnl)}</b>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      <Calendar
-        trades={shown}
-        month={month}
-        setMonth={setMonth}
-        note={[
-          fSym && `Simbol ${fSym}`,
-          fSetup && `Setup ${fSetup}`,
-          (fStart || fEnd) && `Periode ${fStart || "..."} s/d ${fEnd || "kini"}`,
-        ]
-          .filter(Boolean)
-          .join(" \u00b7 ")}
-      />
-
-      <section className="panel" id="form-panel">
-        <h2>{e ? "Edit trade" : "Catat trade"}</h2>
-        {e && (
-          <div className="banner row" style={{ marginBottom: 12 }}>
-            Mengedit trade {e.symbol} tanggal {e.traded_at}.
-            <button className="link" type="button" onClick={() => { setEditing(null); setErr(""); }}>Batal edit</button>
-          </div>
-        )}
-        <form className="grid" key={e?.id ?? "new"} onSubmit={save}>
-          <label>Tanggal<input type="date" name="date" defaultValue={e?.traded_at ?? todayStr()} required /></label>
-          <label>Simbol<input name="symbol" placeholder="EURUSD" defaultValue={e?.symbol} required /></label>
-          <label>Posisi
-            <select name="side" defaultValue={e?.side ?? "long"}>
-              <option value="long">Long (beli)</option><option value="short">Short (jual)</option>
-            </select>
-          </label>
-          <label>Harga entry<input type="number" step="any" name="entry" defaultValue={e?.entry_price} required /></label>
-          <label>Harga exit<input type="number" step="any" name="exit" defaultValue={e?.exit_price} required /></label>
-          <label>Ukuran (lot/unit)<input type="number" step="any" min="0" name="qty" defaultValue={e?.quantity} required /></label>
-          <label>Stop loss<input type="number" step="any" name="sl" defaultValue={e?.stop_loss ?? ""} placeholder="Untuk hitung R" /></label>
-          <label>Take profit<input type="number" step="any" name="tp" defaultValue={e?.take_profit ?? ""} placeholder="Untuk hitung R:R" /></label>
-          <label>Biaya (fee/swap)<input type="number" step="any" min="0" name="fees" defaultValue={e?.fees || ""} placeholder="0" /></label>
-          <label>Ukuran pip<input type="number" step="any" min="0" name="pipsize" defaultValue={e?.pip_size ?? ""} placeholder="Otomatis" /></label>
-          <label>Nilai per pip (1 lot)<input type="number" step="any" min="0" name="pipval" defaultValue={e?.pip_value ?? ""} placeholder="Opsional" /></label>
-          <small className="hint wide">
-            Pips dihitung otomatis untuk pasangan mata uang (0.0001, atau 0.01 untuk JPY), XAU (0.1), dan XAG (0.01). Isi &quot;Ukuran pip&quot; untuk simbol lain atau jika broker Anda berbeda.
-            Isi &quot;Nilai per pip&quot; (dalam mata uang akun, per 1 lot, lihat di broker) agar P&amp;L dihitung dari pips x nilai per pip x lot; kosongkan untuk P&amp;L dari selisih harga x ukuran.
-          </small>
-          <label>Setup<input name="setup" list="setup-list" placeholder="Breakout, pullback…" defaultValue={e?.setup ?? ""} /></label>
-          <datalist id="setup-list">{setups.map((x) => <option key={x} value={x} />)}</datalist>
-          <label className="wide">Catatan<input name="notes" placeholder="Alasan masuk, emosi, pelajaran" defaultValue={e?.notes ?? ""} /></label>
-          <label className="wide">Screenshot chart (gambar, maks. 5 MB)<input type="file" name="shot" accept="image/*" /></label>
-          {e?.screenshot_path && (
-            <label className="wide chk"><input type="checkbox" name="rmshot" /> Hapus screenshot yang tersimpan</label>
+          {loading ? (
+            <div className="skeleton skel-hero" />
+          ) : (
+            <section className="hero" aria-label="Ringkasan ekuitas">
+              <div className="lbl">Total profit &amp; loss{isFiltered ? " (terfilter)" : ""}</div>
+              <div className={`big ${cls(s.total)}`}>{sg(s.total)}</div>
+              <InteractiveChart trades={shown} values={s.curve} />
+            </section>
           )}
-          <div className="row wide">
-            <button className="btn" type="submit" disabled={saving}>
-              {saving ? "Menyimpan…" : e ? "Simpan perubahan" : "Simpan trade"}
-            </button>
-            {err && <span className="err" role="alert">{err}</span>}
-          </div>
-        </form>
-      </section>
 
-      <section className="panel">
-        <div className="table-toolbar">
-          <h2>Riwayat trade</h2>
-          <div className="row" style={{ gap: 8 }}>
-            <span className="table-count-badge">
-              <b>{sortedRows.length}</b> trade{isFiltered ? " (terfilter)" : ""}
-            </span>
-          </div>
-        </div>
+          {loading ? (
+            <div className="skel-stats">
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div key={i} className="skeleton skel-stat" />
+              ))}
+            </div>
+          ) : (
+            <section className="stats" aria-label="Statistik">
+              <div><b>{s.count}</b><small>Jumlah trade</small></div>
+              <div><b>{s.count ? `${num(s.winRate, 1)}%` : "\u2013"}</b><small>Win rate</small></div>
+              <div><b>{s.count ? s.pf : "\u2013"}</b><small>Profit factor</small></div>
+              <div><b>{s.avgWin}</b><small>Rata-rata menang</small></div>
+              <div><b>{s.avgLoss}</b><small>Rata-rata kalah</small></div>
+              <div><b className={cls(s.rTotal)}>{s.rCount ? `${sg(s.rTotal)}R` : "\u2013"}</b><small>Total R</small></div>
+              <div><b className={cls(s.rAvg)}>{s.rCount ? `${sg(s.rAvg)}R` : "\u2013"}</b><small>Rata-rata R per trade</small></div>
+              <div><b className={cls(s.pipTotal)}>{s.pipCount ? `${sg(s.pipTotal, 1)}` : "\u2013"}</b><small>Total pips</small></div>
+              <div><b className={cls(s.pipAvg)}>{s.pipCount ? `${sg(s.pipAvg, 1)}` : "\u2013"}</b><small>Rata-rata pips per trade</small></div>
+            </section>
+          )}
 
-        <div className="tw">
-          <table>
-            <thead>
-              <tr>
-                <SortTh field="traded_at" label="Tanggal" />
-                <SortTh field="symbol" label="Simbol" />
-                <SortTh field="side" label="Posisi" />
-                <SortTh field="entry_price" label="Entry" align="right" />
-                <SortTh field="exit_price" label="Exit" align="right" />
-                <SortTh field="quantity" label="Ukuran" align="right" />
-                <SortTh field="pips" label="Pips" align="right" />
-                <SortTh field="plan" label="R:R rencana" align="right" />
-                <SortTh field="r" label="R hasil" align="right" />
-                <SortTh field="pnl" label="P&L" align="right" />
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={`skel-${i}`}>
-                    <td colSpan={11} style={{ padding: "10px 12px" }}>
-                      <div className="skeleton skel-table-row" style={{ height: 38, margin: 0 }} />
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                pagedRows.map((t) => {
-                  const p = pnl(t), r = rMult(t), plan = rr(t), pp = pipsOf(t), sl = slPips(t), tp = tpPips(t);
-                  return (
-                    <tr key={t.id}>
-                      <td data-label="Tanggal">{t.traded_at}</td>
-                      <td data-label="Simbol" className="c-sym">
-                        <div className="sym">{t.symbol}</div>
-                        {t.setup && <div className="note">{t.setup}</div>}
-                        {t.notes && <div className="note">{t.notes}</div>}
-                      </td>
-                      <td data-label="Posisi"><span className={`tag ${t.side}`}>{t.side === "long" ? "Long" : "Short"}</span></td>
-                      <td className="r" data-label="Entry">{num(t.entry_price, 5)}</td>
-                      <td className="r" data-label="Exit">{num(t.exit_price, 5)}</td>
-                      <td className="r" data-label="Ukuran">{num(t.quantity, 4)}</td>
-                      <td className="r" data-label="Pips"><div>
-                        {pp == null ? "\u2013" : <span className={cls(pp)}>{sg(pp, 1)}</span>}
-                        {(sl != null || tp != null) && (
-                          <div className="note" style={{ maxWidth: "none" }}>
-                            {sl != null ? `SL ${num(sl, 1)}` : ""}{sl != null && tp != null ? " \u00b7 " : ""}{tp != null ? `TP ${num(tp, 1)}` : ""}
-                          </div>
-                        )}
-                      </div></td>
-                      <td className="r" data-label="R:R rencana">{plan == null ? "\u2013" : `1:${num(plan)}`}</td>
-                      <td className={`r ${r == null ? "" : cls(r)}`} data-label="R hasil">{r == null ? "\u2013" : `${sg(r)}R`}</td>
-                      <td className={`r ${cls(p)}`} data-label="P&amp;L"><b>{sg(p)}</b></td>
-                      <td className="r act" style={{ whiteSpace: "nowrap" }}>
-                        {t.screenshot_path && <button className="link" onClick={() => openShot(t.screenshot_path!)}>Chart</button>}
-                        <button className="link" onClick={() => startEdit(t)}>Edit</button>
-                        <button className="x" aria-label="Hapus trade" onClick={() => remove(t)}>
-                          {armed === t.id ? "Yakin?" : "Hapus"}
-                        </button>
-                      </td>
+          {/* Kartu Analitik Lanjutan */}
+          {!loading && s.count > 0 && (
+            <div className="analytics-cards" aria-label="Analitik lanjutan">
+              <div className="analytics-card">
+                <div className="card-head">
+                  <span className="card-title">Max Drawdown</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--loss)" }}>
+                    <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+                    <polyline points="17 18 23 18 23 12" />
+                  </svg>
+                </div>
+                <div className="card-val neg">
+                  {s.maxDrawdown > 0 ? `−${num(s.maxDrawdown)}` : "0.00"}
+                </div>
+                <div className="card-sub">Penurunan terbesar dari puncak</div>
+              </div>
+
+              <div className="analytics-card">
+                <div className="card-head">
+                  <span className="card-title">Sharpe Ratio</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent)" }}>
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 6v6l4 2" />
+                  </svg>
+                </div>
+                <div className={`card-val ${s.sharpeRatio != null ? (s.sharpeRatio >= 1 ? "pos" : s.sharpeRatio < 0 ? "neg" : "") : ""}`}>
+                  {s.sharpeRatio != null ? num(s.sharpeRatio, 2) : "–"}
+                </div>
+                <div className="card-sub">
+                  {s.sharpeRatio != null
+                    ? s.sharpeRatio >= 2
+                      ? "Sangat Baik (≥ 2.0)"
+                      : s.sharpeRatio >= 1
+                        ? "Baik (≥ 1.0)"
+                        : "Risiko Tinggi (< 1.0)"
+                    : "Risk-adjusted return"}
+                </div>
+              </div>
+
+              <div className="analytics-card">
+                <div className="card-head">
+                  <span className="card-title">Streak Menang</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--win)" }}>
+                    <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                  </svg>
+                </div>
+                <div className="card-val pos">
+                  {s.maxWinStreak} <small style={{ fontSize: 13, fontWeight: 600 }}>trade</small>
+                </div>
+                <div className="card-sub">
+                  Saat ini:{" "}
+                  {s.curStreakType === "win" ? (
+                    <b className="pos">+{s.curStreakCount} Win beruntun</b>
+                  ) : s.curStreakType === "loss" ? (
+                    <b className="neg">−{s.curStreakCount} Loss beruntun</b>
+                  ) : (
+                    "–"
+                  )}
+                </div>
+              </div>
+
+              <div className="analytics-card">
+                <div className="card-head">
+                  <span className="card-title">Streak Kalah</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--loss)" }}>
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                </div>
+                <div className="card-val neg">
+                  {s.maxLossStreak} <small style={{ fontSize: 13, fontWeight: 600 }}>trade</small>
+                </div>
+                <div className="card-sub">Kekalahan beruntun terpanjang</div>
+              </div>
+            </div>
+          )}
+
+          {/* Performa per Setup */}
+          {!loading && s.setupList && s.setupList.length > 0 && (
+            <section className="panel setup-panel">
+              <div className="table-toolbar">
+                <h2>Performa per Setup</h2>
+                <span className="table-count-badge">
+                  <b>{s.setupList.length}</b> setup
+                </span>
+              </div>
+
+              <div className="setup-table-wrap">
+                <table className="setup-table">
+                  <thead>
+                    <tr>
+                      <th>Nama Setup</th>
+                      <th className="r">Trade</th>
+                      <th className="r">Win Rate</th>
+                      <th className="r">Profit Factor</th>
+                      <th className="r">Rata-rata R</th>
+                      <th className="r">Total P&amp;L</th>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  </thead>
+                  <tbody>
+                    {s.setupList.map((st) => (
+                      <tr key={st.name}>
+                        <td>
+                          <b>{st.name}</b>
+                        </td>
+                        <td className="r">{st.count}</td>
+                        <td className="r">
+                          <div className="setup-progress">
+                            <span>{num(st.winRate, 1)}%</span>
+                            <div className="setup-bar-track">
+                              <div
+                                className="setup-bar-fill"
+                                style={{
+                                  width: `${Math.min(100, Math.max(0, st.winRate))}%`,
+                                  backgroundColor: st.winRate >= 50 ? "var(--win)" : "var(--loss)",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="r">{st.pf >= 999 ? "∞" : num(st.pf, 2)}</td>
+                        <td className={`r ${st.avgR != null ? cls(st.avgR) : ""}`}>
+                          {st.avgR != null ? `${sg(st.avgR, 2)}R` : "–"}
+                        </td>
+                        <td className={`r ${cls(st.totalPnl)}`}>
+                          <b>{sg(st.totalPnl)}</b>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
-        {!loading && pagedRows.length === 0 && (
-          <div className="empty">
-            {trades.length ? "Tidak ada trade yang cocok dengan filter." : "Belum ada trade. Isi form di atas untuk mencatat trade pertama Anda."}
-          </div>
-        )}
+          <Calendar
+            trades={shown}
+            month={month}
+            setMonth={setMonth}
+            note={[
+              fSym && `Simbol ${fSym}`,
+              fSetup && `Setup ${fSetup}`,
+              (fStart || fEnd) && `Periode ${fStart || "..."} s/d ${fEnd || "kini"}`,
+            ]
+              .filter(Boolean)
+              .join(" \u00b7 ")}
+          />
 
-        {/* Pagination controls */}
-        {!loading && totalRows > 0 && (
-          <div className="pagination">
-            <div className="pagination-info">
-              Menampilkan <b>{startIndex + 1}–{endIndex}</b> dari <b>{totalRows}</b> trade
-            </div>
-
-            <div className="pagination-controls">
-              <button
-                type="button"
-                className="pagination-btn"
-                disabled={currentPage <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                aria-label="Halaman sebelumnya"
-              >
-                &lsaquo;
-              </button>
-
-              {getPageNumbers(currentPage, totalPages).map((p, idx) =>
-                typeof p === "number" ? (
-                  <button
-                    key={p}
-                    type="button"
-                    className={`pagination-btn ${currentPage === p ? "active" : ""}`}
-                    onClick={() => setPage(p)}
-                  >
-                    {p}
-                  </button>
-                ) : (
-                  <span key={`ellipsis-${idx}`} style={{ padding: "0 4px", color: "var(--mute)" }}>
-                    ...
-                  </span>
-                )
-              )}
-
-              <button
-                type="button"
-                className="pagination-btn"
-                disabled={currentPage >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                aria-label="Halaman berikutnya"
-              >
-                &rsaquo;
-              </button>
-            </div>
-
-            <div className="pagination-size">
-              <label>
-                Tampilkan:
-                <select
-                  value={pageSize}
-                  onChange={(ev) => {
-                    setPageSize(Number(ev.target.value));
-                    setPage(1);
-                  }}
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
+          <section className="panel" id="form-panel">
+            <h2>{e ? "Edit trade" : "Catat trade"}</h2>
+            {e && (
+              <div className="banner row" style={{ marginBottom: 12 }}>
+                Mengedit trade {e.symbol} tanggal {e.traded_at}.
+                <button className="link" type="button" onClick={() => { setEditing(null); setErr(""); }}>Batal edit</button>
+              </div>
+            )}
+            <form className="grid" key={e?.id ?? "new"} onSubmit={save}>
+              <label>Tanggal<input type="date" name="date" defaultValue={e?.traded_at ?? todayStr()} required /></label>
+              <label>Simbol<input name="symbol" placeholder="EURUSD" defaultValue={e?.symbol} required /></label>
+              <label>Posisi
+                <select name="side" defaultValue={e?.side ?? "long"}>
+                  <option value="long">Long (beli)</option><option value="short">Short (jual)</option>
                 </select>
-                baris
               </label>
+              <label>Harga entry<input type="number" step="any" name="entry" defaultValue={e?.entry_price} required /></label>
+              <label>Harga exit<input type="number" step="any" name="exit" defaultValue={e?.exit_price} required /></label>
+              <label>Ukuran (lot/unit)<input type="number" step="any" min="0" name="qty" defaultValue={e?.quantity} required /></label>
+              <label>Stop loss<input type="number" step="any" name="sl" defaultValue={e?.stop_loss ?? ""} placeholder="Untuk hitung R" /></label>
+              <label>Take profit<input type="number" step="any" name="tp" defaultValue={e?.take_profit ?? ""} placeholder="Untuk hitung R:R" /></label>
+              <label>Biaya (fee/swap)<input type="number" step="any" min="0" name="fees" defaultValue={e?.fees || ""} placeholder="0" /></label>
+              <label>Ukuran pip<input type="number" step="any" min="0" name="pipsize" defaultValue={e?.pip_size ?? ""} placeholder="Otomatis" /></label>
+              <label>Nilai per pip (1 lot)<input type="number" step="any" min="0" name="pipval" defaultValue={e?.pip_value ?? ""} placeholder="Opsional" /></label>
+              <small className="hint wide">
+                Pips dihitung otomatis untuk pasangan mata uang (0.0001, atau 0.01 untuk JPY), XAU (0.1), dan XAG (0.01). Isi &quot;Ukuran pip&quot; untuk simbol lain atau jika broker Anda berbeda.
+                Isi &quot;Nilai per pip&quot; (dalam mata uang akun, per 1 lot, lihat di broker) agar P&amp;L dihitung dari pips x nilai per pip x lot; kosongkan untuk P&amp;L dari selisih harga x ukuran.
+              </small>
+              <label>Setup<input name="setup" list="setup-list" placeholder="Breakout, pullback…" defaultValue={e?.setup ?? ""} /></label>
+              <datalist id="setup-list">{setups.map((x) => <option key={x} value={x} />)}</datalist>
+              <label className="wide">Catatan<input name="notes" placeholder="Alasan masuk, emosi, pelajaran" defaultValue={e?.notes ?? ""} /></label>
+              <label className="wide">Screenshot chart (gambar, maks. 5 MB)<input type="file" name="shot" accept="image/*" /></label>
+              {e?.screenshot_path && (
+                <label className="wide chk"><input type="checkbox" name="rmshot" /> Hapus screenshot yang tersimpan</label>
+              )}
+              <div className="row wide">
+                <button className="btn" type="submit" disabled={saving}>
+                  {saving ? "Menyimpan…" : e ? "Simpan perubahan" : "Simpan trade"}
+                </button>
+                {err && <span className="err" role="alert">{err}</span>}
+              </div>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="table-toolbar">
+              <h2>Riwayat trade</h2>
+              <div className="row" style={{ gap: 8 }}>
+                <span className="table-count-badge">
+                  <b>{sortedRows.length}</b> trade{isFiltered ? " (terfilter)" : ""}
+                </span>
+              </div>
             </div>
-          </div>
-        )}
-      </section>
-      </>
+
+            <div className="tw">
+              <table>
+                <thead>
+                  <tr>
+                    <SortTh field="traded_at" label="Tanggal" />
+                    <SortTh field="symbol" label="Simbol" />
+                    <SortTh field="side" label="Posisi" />
+                    <SortTh field="entry_price" label="Entry" align="right" />
+                    <SortTh field="exit_price" label="Exit" align="right" />
+                    <SortTh field="quantity" label="Ukuran" align="right" />
+                    <SortTh field="pips" label="Pips" align="right" />
+                    <SortTh field="plan" label="R:R rencana" align="right" />
+                    <SortTh field="r" label="R hasil" align="right" />
+                    <SortTh field="pnl" label="P&L" align="right" />
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={`skel-${i}`}>
+                        <td colSpan={11} style={{ padding: "10px 12px" }}>
+                          <div className="skeleton skel-table-row" style={{ height: 38, margin: 0 }} />
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    pagedRows.map((t) => {
+                      const p = pnl(t), r = rMult(t), plan = rr(t), pp = pipsOf(t), sl = slPips(t), tp = tpPips(t);
+                      return (
+                        <tr key={t.id}>
+                          <td data-label="Tanggal">{t.traded_at}</td>
+                          <td data-label="Simbol" className="c-sym">
+                            <div className="sym">{t.symbol}</div>
+                            {t.setup && <div className="note">{t.setup}</div>}
+                            {t.notes && <div className="note">{t.notes}</div>}
+                          </td>
+                          <td data-label="Posisi"><span className={`tag ${t.side}`}>{t.side === "long" ? "Long" : "Short"}</span></td>
+                          <td className="r" data-label="Entry">{num(t.entry_price, 5)}</td>
+                          <td className="r" data-label="Exit">{num(t.exit_price, 5)}</td>
+                          <td className="r" data-label="Ukuran">{num(t.quantity, 4)}</td>
+                          <td className="r" data-label="Pips"><div>
+                            {pp == null ? "\u2013" : <span className={cls(pp)}>{sg(pp, 1)}</span>}
+                            {(sl != null || tp != null) && (
+                              <div className="note" style={{ maxWidth: "none" }}>
+                                {sl != null ? `SL ${num(sl, 1)}` : ""}{sl != null && tp != null ? " \u00b7 " : ""}{tp != null ? `TP ${num(tp, 1)}` : ""}
+                              </div>
+                            )}
+                          </div></td>
+                          <td className="r" data-label="R:R rencana">{plan == null ? "\u2013" : `1:${num(plan)}`}</td>
+                          <td className={`r ${r == null ? "" : cls(r)}`} data-label="R hasil">{r == null ? "\u2013" : `${sg(r)}R`}</td>
+                          <td className={`r ${cls(p)}`} data-label="P&amp;L"><b>{sg(p)}</b></td>
+                          <td className="r act" style={{ whiteSpace: "nowrap" }}>
+                            {t.screenshot_path && <button className="link" onClick={() => openShot(t.screenshot_path!)}>Chart</button>}
+                            <button className="link" onClick={() => startEdit(t)}>Edit</button>
+                            <button className="x" aria-label="Hapus trade" onClick={() => remove(t)}>
+                              {armed === t.id ? "Yakin?" : "Hapus"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {!loading && pagedRows.length === 0 && (
+              <div className="empty">
+                {trades.length ? "Tidak ada trade yang cocok dengan filter." : "Belum ada trade. Isi form di atas untuk mencatat trade pertama Anda."}
+              </div>
+            )}
+
+            {/* Pagination controls */}
+            {!loading && totalRows > 0 && (
+              <div className="pagination">
+                <div className="pagination-info">
+                  Menampilkan <b>{startIndex + 1}–{endIndex}</b> dari <b>{totalRows}</b> trade
+                </div>
+
+                <div className="pagination-controls">
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    aria-label="Halaman sebelumnya"
+                  >
+                    &lsaquo;
+                  </button>
+
+                  {getPageNumbers(currentPage, totalPages).map((p, idx) =>
+                    typeof p === "number" ? (
+                      <button
+                        key={p}
+                        type="button"
+                        className={`pagination-btn ${currentPage === p ? "active" : ""}`}
+                        onClick={() => setPage(p)}
+                      >
+                        {p}
+                      </button>
+                    ) : (
+                      <span key={`ellipsis-${idx}`} style={{ padding: "0 4px", color: "var(--mute)" }}>
+                        ...
+                      </span>
+                    )
+                  )}
+
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    aria-label="Halaman berikutnya"
+                  >
+                    &rsaquo;
+                  </button>
+                </div>
+
+                <div className="pagination-size">
+                  <label>
+                    Tampilkan:
+                    <select
+                      value={pageSize}
+                      onChange={(ev) => {
+                        setPageSize(Number(ev.target.value));
+                        setPage(1);
+                      }}
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                    baris
+                  </label>
+                </div>
+              </div>
+            )}
+          </section>
+        </>
       )}
 
       {view === "daily" && (
