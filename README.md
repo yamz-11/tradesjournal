@@ -1,98 +1,172 @@
-# Jurnal Trading
+# 📈 Trade Journal - Modern Trading Journal & Analytics
 
-Aplikasi web sederhana untuk mencatat dan menganalisis trade. Dibangun dengan Next.js dan Supabase (PostgreSQL), dengan login, penyimpanan screenshot chart, dan statistik performa.
+Aplikasi web modern, cepat, dan komprehensif untuk mencatat, menganalisis performa trading, serta mengevaluasi psikologi trading harian dan mingguan. Dibangun menggunakan **Next.js 16** (App Router & Turbopack), **TypeScript**, **Supabase** (PostgreSQL, Auth & Storage), serta desain responsif modern dengan dukungan Dark/Light mode manual.
 
-## Fitur
+---
 
-- **Login** dengan email dan kata sandi (Supabase Auth). Setiap pengguna hanya bisa melihat datanya sendiri (Row Level Security).
-- **Catat dan edit trade**: tanggal, simbol, posisi (long/short), harga entry/exit, ukuran, biaya, stop loss, take profit, setup, dan catatan.
-- **Upload screenshot chart** (gambar, maksimal 5 MB) yang tersimpan privat di Supabase Storage.
-- **Perhitungan pips**: hasil, stop loss, dan take profit dalam pips (ukuran pip otomatis untuk forex, emas, dan perak, bisa diatur manual), total dan rata-rata pips, serta P&L berbasis nilai per pip dan lot.
-- **R-multiple dan risk/reward**: R hasil (hasil bersih dibagi risiko awal) serta R:R rencana, lengkap dengan total R dan rata-rata R.
-- **Filter** per simbol dan setup. Statistik, kurva ekuitas, dan kalender ikut terfilter.
-- **Statistik**: total P&L, win rate, profit factor, rata-rata menang/kalah.
-- **Kurva ekuitas** dan **kalender P&L harian** per bulan.
-- Tampilan responsif dengan mode terang/gelap otomatis mengikuti perangkat.
+## ✨ Fitur Utama
 
-## Teknologi
+### 1. 📊 Dashboard & Analitik Lanjutan
+- **Ringkasan Finansial:** Total Net P&L, Win Rate, Profit Factor, Rata-rata Win/Loss, Total Pips, dan R-Multiple (Total & Rata-rata R).
+- **Analitik Kinerja Tingkat Lanjut:**
+  - **Max Drawdown:** Penurunan modal terbesar dari puncak ekuitas (*peak-to-trough*).
+  - **Sharpe Ratio:** Pengukuran *risk-adjusted return* terhadap volatilitas hasil trade.
+  - **Streak Tracker:** Rekor kemenangan berturut-turut (*Max Win Streak*), kekalahan berturut-turut (*Max Loss Streak*), dan streak yang sedang aktif.
+  - **Performa per Setup:** Tabel efektivitas masing-masing setup/strategi trading dengan visualisasi progress bar Win Rate, Profit Factor, Rata-rata R, dan akumulasi P&L.
+- **Chart Interaktif:**
+  - Pilihan tampilan **Kurva Ekuitas (Equity Curve)** vs **Drawdown Curve**.
+  - Garis baseline nol, hover tracking crosshair, dan floating tooltip dinamis.
+- **Kalender P&L:** Tampilan kalender bulanan interaktif yang merangkum hasil trade per hari beserta penanda hari untung (hijau) dan rugi (merah).
 
-- [Next.js](https://nextjs.org) (App Router) dan TypeScript
-- [Supabase](https://supabase.com): PostgreSQL, Auth, dan Storage
-- CSS biasa (tanpa Tailwind)
+### 2. 📋 Manajemen & Riwayat Trade
+- **Pencatatan Lengkap:** Tanggal, Simbol, Posisi (Long/Short), Harga Entry & Exit, Ukuran (Lot/Unit), Stop Loss, Take Profit, Biaya (Fee/Swap), Ukuran Pip, Nilai Pip, Setup, Catatan, dan Screenshot Chart.
+- **Kalkulasi Otomatis:**
+  - **Pips Otomatis:** Perhitungan otomatis untuk pasangan Forex (0.0001, atau 0.01 untuk pasangan JPY), Emas/XAU (0.1), dan Perak/XAG (0.01) dengan opsi ukuran pip kustom.
+  - **P&L Fleksibel:** Mendukung kalkulasi berbasis nilai per pip x lot maupun selisih harga x ukuran.
+  - **R-Multiple & R:R Rencana:** Menghitung rasio Risk:Reward rencana dan realisasi R hasil.
+- **Upload Screenshot Chart:** Gambar hingga 5 MB tersimpan aman dan privat di Supabase Storage.
+- **Tabel Interaktif Modern:**
+  - **Sorting Multikolom:** Urutkan berdasarkan Tanggal, Simbol, Posisi, Entry, Exit, Ukuran, Pips, R:R, R hasil, atau P&L.
+  - **Paginasi Fleksibel:** Pengaturan jumlah baris (5, 10, 25, 50, 100 baris per halaman) dengan navigasi halaman yang mulus.
+- **Filter Canggih:** Filter berdasarkan Simbol, Setup, serta **Preset Rentang Tanggal** (*Hari Ini, Minggu Ini, Bulan Ini, YTD, Semua*) dan input tanggal kustom.
 
-## Prasyarat
+### 3. 🧠 Jurnal Harian (Daily Reflection & Psychology)
+- **Pelacak Mood & Psikologi:** Pilihan status psikologis saat trading (*Percaya Diri, Tenang, Netral, Cemas, FOMO, Frustrasi*).
+- **Catatan Refleksi:** Dokumentasi kondisi market, kestabilan emosi, evaluasi/pelajaran hari ini, dan rencana esok hari.
+- **Integrasi Otomatis:** Setiap entri jurnal harian secara otomatis menampilkan total trade dan akumulasi P&L yang terjadi pada tanggal tersebut.
+- **Riwayat & Edit:** Riwayat jurnal harian yang rapi dengan opsi edit dan hapus.
 
-- Node.js 20.9 atau lebih baru (cek dengan `node -v`)
-- Akun [Supabase](https://supabase.com) (paket gratis cukup)
-- Git
+### 4. 🎯 Weekly Review (Evaluasi Mingguan)
+- **Navigasi Mingguan:** Tombol navigasi untuk berpindah antar minggu dengan mudah.
+- **Statistik Mingguan Otomatis:** Ringkasan performa otomatis untuk minggu yang dipilih (Total trade, Win rate, Net P&L mingguan, Best trade, dan Worst trade).
+- **Rating Disiplin Eksekusi:** Penilaian disiplin terhadap trading plan dan rule management dengan skala 1–5 bintang (★).
+- **Format Evaluasi 3 Pilar:**
+  - *What Went Well:* Apa yang berjalan dengan sangat baik.
+  - *Mistakes & Weaknesses:* Kesalahan, pelanggaran rule, atau kelemahan yang terjadi.
+  - *Next Week's Focus:* Komitmen spesifik dan fokus perbaikan untuk minggu berikutnya.
 
-## Instalasi
+### 5. 🎨 UI/UX Modern & Responsif
+- **Manual Dark / Light Mode:** Toggle tema yang elegan di header dan halaman login, tersimpan otomatis di `localStorage`.
+- **Skeleton Shimmer Loading:** Animasi pemuatan halus saat mengambil data.
+- **Sistem Notifikasi Toast:** Pesan status mengambang untuk konfirmasi simpan, edit, hapus, maupun pesan error.
+- **Resilient Offline/Local Fallback:** Jika koneksi Supabase terganggu atau tabel belum dibuat, aplikasi tetap dapat beroperasi menggunakan sinkronisasi `localStorage`.
 
-### 1. Clone dan pasang dependensi
+---
+
+## 🛠️ Teknologi yang Digunakan
+
+- **Framework:** [Next.js 16](https://nextjs.org) (App Router, Turbopack, React 19)
+- **Bahasa:** [TypeScript](https://www.typescriptlang.org/)
+- **Backend & Database:** [Supabase](https://supabase.com) (PostgreSQL, Supabase Auth, Row Level Security, Supabase Storage)
+- **Styling:** Modern Vanilla CSS dengan CSS Custom Properties (Design Tokens), Glassmorphism, dan fluid layout tanpa dependensi CSS framework eksternal.
+
+---
+
+## 📦 Prasyarat Sistem
+
+- **Node.js:** Versi 20.9.0 atau yang lebih baru (`node -v`)
+- **NPM / PNPM / Yarn**
+- **Akun Supabase:** (Tingkat Free Tier sudah sangat mencukupi)
+
+---
+
+## 🚀 Panduan Instalasi & Menjalankan
+
+### 1. Clone Repository & Install Dependensi
 
 ```bash
 git clone <url-repo-anda>
-cd <nama-folder-repo>
+cd trade-journal
 npm install
 ```
 
-### 2. Siapkan database Supabase
+### 2. Konfigurasi Database Supabase
 
-1. Buat project baru di Supabase.
-2. Buka **SQL Editor** > **New query**, tempel isi `supabase/schema.sql`, lalu **Run**.
-3. Buat query baru, tempel isi `supabase/migration-2.sql`, lalu **Run**.
-4. Buat query baru, tempel isi `supabase/migration-3.sql`, lalu **Run**.
+1. Buka dashboard proyek Anda di [Supabase](https://supabase.com).
+2. Masuk ke menu **SQL Editor** > **New query**.
+3. Buka file [`supabase/schema.sql`](supabase/schema.sql) di repositori ini, salin seluruh kodenya, tempelkan ke SQL Editor Supabase, lalu klik **Run**.
+   > File `schema.sql` sudah mencakup pembuatan tabel `trades`, `daily_journals`, `weekly_reviews`, indeks performa, storage bucket `screenshots`, serta seluruh konfigurasi Row Level Security (RLS).
+4. Pastikan di menu **Storage** telah terbentuk bucket privat bernama `screenshots`.
 
-> Urutannya penting: `schema.sql` harus dijalankan lebih dulu, lalu `migration-2.sql`, lalu `migration-3.sql`, karena migrasi menambah kolom ke tabel `trades`.
+### 3. Konfigurasi Environment Variables
 
-Setelah itu pastikan:
-- Tabel `trades` memiliki kolom `stop_loss`, `take_profit`, `screenshot_path`, `pip_size`, dan `pip_value`.
-- Di **Storage** ada bucket privat `screenshots` dengan empat policy berakhiran `_own`.
+Buat file baru bernama `.env.local` pada direktori root proyek (sejajar dengan `package.json`):
 
-### 3. Atur variabel lingkungan
-
-Buat file `.env.local` di root proyek (sejajar dengan `package.json`):
-
-```
-NEXT_PUBLIC_SUPABASE_URL=https://namaproject.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=isi-dengan-publishable-atau-anon-key
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
 
-- URL berakhir di `.supabase.co`, tanpa `/rest/v1/` dan tanpa garis miring di akhir.
-- Ambil key dari **Project Settings > API Keys** (atau tombol **Connect**). Gunakan key **publishable/anon**.
-- **Jangan** memakai key `service_role` atau `secret` di aplikasi ini.
-- File `.env.local` tidak ikut ke Git (sudah diabaikan). Setiap komputer yang menjalankan proyek harus membuat file ini sendiri.
+> **Catatan:**
+> - Dapatkan kredensial di menu **Project Settings** > **API** di Supabase.
+> - Gunakan key bertipe `anon` / `public`. **Jangan** gunakan `service_role` key di frontend.
+> - Pastikan URL tidak diakhiri dengan garis miring `/`.
 
-### 4. Jalankan
+### 4. Jalankan Aplikasi di Mode Development
 
 ```bash
 npm run dev
 ```
 
-Buka http://localhost:3000 atau https://yamztrades.netlify.app/, login dengan email dan password, lalu mulai mencatat trade.
+Buka peramban Anda di [http://localhost:3000](http://localhost:3000). Daftarkan akun baru Anda atau login untuk mulai mengelola jurnal trading.
 
-> Setiap kali mengubah `.env.local`, hentikan server dengan `Ctrl + C` dan jalankan lagi.
+### 5. Build untuk Produksi
 
-## Cara perhitungan
+```bash
+npm run build
+npm start
+```
 
-- **Pips** = (exit − entry) ÷ ukuran pip untuk long, dan (entry − exit) ÷ ukuran pip untuk short. Ukuran pip otomatis: pasangan mata uang 0.0001 (0.01 jika quote JPY), XAU 0.1, XAG 0.01. Untuk simbol lain (kripto, indeks, saham) atau jika broker Anda memakai definisi berbeda, isi **Ukuran pip** manual.
-- **P&L** (jika **Nilai per pip** diisi) = pips × nilai per pip × lot − biaya. Nilai per pip adalah nilai 1 pip untuk 1 lot dalam mata uang akun; ambil dari broker atau kalkulator pip karena bergantung pada pasangan dan kurs.
-- **P&L** (jika **Nilai per pip** kosong) = (exit − entry) × ukuran − biaya untuk long, dan (entry − exit) × ukuran − biaya untuk short.
-- **R-multiple** = P&L bersih ÷ risiko awal. Risiko awal = jarak stop loss dalam pips × nilai per pip × lot (jika nilai per pip diisi), atau |entry − stop loss| × ukuran. Hanya dihitung jika stop loss diisi.
-- **R:R rencana** = |take profit − entry| ÷ |entry − stop loss|. Hanya dihitung jika stop loss dan take profit diisi.
-- **Profit factor** = total profit ÷ total kerugian.
+---
 
-Untuk forex, isi **Nilai per pip** supaya P&L sesuai dengan akun broker. Tanpa itu, P&L hanya selisih harga × ukuran dan tidak memperhitungkan ukuran kontrak.
+## 📐 Formula & Rumus Perhitungan
 
-## Pemecahan masalah
-
-| Masalah | Penyebab dan solusi |
+| Metrik | Formula / Cara Hitung |
 |---|---|
-| `supabaseUrl is required` | `.env.local` belum ada, salah nama (misalnya `.env.local.txt`), salah lokasi, atau server belum di-restart. |
-| `Failed to fetch` saat login | URL Supabase salah atau jaringan tidak bisa menjangkau `supabase.co`. Coba buka `https://namaproject.supabase.co/rest/v1/` di browser. |
-| `relation "public.trades" does not exist` | `schema.sql` belum dijalankan. Jalankan sebelum `migration-2.sql`. |
-| `policy ... already exists` | Script sudah pernah dijalankan. Hapus policy lama atau lewati script. |
-| Upload screenshot gagal (RLS) | Policy storage belum terbentuk atau Anda belum login. |
-| Build Netlify gagal karena *secrets scanning* | Tambahkan variabel `SECRETS_SCAN_OMIT_KEYS` berisi `NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY`. |
-| Build Netlify gagal karena versi Node | Tambahkan variabel `NODE_VERSION` bernilai `20`. |
+| **Pips (Long)** | `(Exit Price - Entry Price) / Pip Size` |
+| **Pips (Short)** | `(Entry Price - Exit Price) / Pip Size` |
+| **P&L (dengan Nilai Pip)** | `(Pips * Pip Value * Quantity) - Fees` |
+| **P&L (tanpa Nilai Pip)** | Long: `((Exit - Entry) * Quantity) - Fees`<br>Short: `((Entry - Exit) * Quantity) - Fees` |
+| **Risiko Awal (Risk)** | Jika Stop Loss ada: `\|Entry Price - Stop Loss\| * Quantity` (atau jarak pip * nilai pip * lot) |
+| **R-Multiple** | `Net P&L / Initial Risk` |
+| **Plan R:R** | `\|Take Profit - Entry\| / \|Entry - Stop Loss\|` |
+| **Profit Factor** | `Total Gross Profit / Total Gross Loss` |
+| **Win Rate** | `(Jumlah Trade Menang / Total Trade) * 100%` |
+| **Max Drawdown** | Penurunan persentase terbesar dari titik saldo tertinggi (*Peak Equity*) |
+| **Sharpe Ratio** | `(Rata-rata Return Trade / Standar Deviasi Return Trade) * sqrt(Trade per Periode)` |
 
+---
+
+## 📁 Struktur Direktori
+
+```text
+trade-journal/
+├── app/
+│   ├── globals.css         # Design tokens, tema gelap/terang, komponen CSS
+│   ├── layout.tsx          # Root layout & metadata aplikasi
+│   └── page.tsx            # Komponen utama (Dashboard, Trade, Daily Journal, Weekly Review)
+├── public/                 # Aset statis & ikon
+├── supabase/
+│   └── schema.sql          # DDL lengkap (Tables, RLS, Storage policies)
+├── .env.local              # Konfigurasi Supabase (dikecualikan dari Git)
+├── package.json            # Daftar dependensi & script runner
+├── tsconfig.json           # Konfigurasi TypeScript
+└── README.md               # Dokumentasi proyek
+```
+
+---
+
+## 💡 Troubleshooting
+
+- **Error: `supabaseUrl is required`**  
+  Pastikan file `.env.local` sudah dibuat di folder root proyek dengan nama yang tepat, lalu restart server development (`Ctrl + C` lalu `npm run dev`).
+- **Gagal Upload Screenshot Chart (Storage RLS)**  
+  Pastikan Anda telah menjalankan seluruh skrip `schema.sql` yang membuat bucket `screenshots` dan policy kepemilikan storage (`_own`).
+- **Deployment ke Netlify / Vercel**  
+  Jangan lupa menambahkan environment variable `NEXT_PUBLIC_SUPABASE_URL` dan `NEXT_PUBLIC_SUPABASE_ANON_KEY` pada pengaturan platform hosting Anda.
+
+---
+
+## 📄 Lisensi
+
+Proyek ini dibuat untuk kebutuhan personal & profesional journal trading. Silakan modifikasi dan kembangkan sesuai kebutuhan gaya trading Anda!
