@@ -786,6 +786,48 @@ type ToastItem = {
   type: "success" | "error" | "info";
 };
 
+type DailyJournal = {
+  id: string;
+  entry_date: string;
+  mood: "great" | "good" | "neutral" | "bad" | "terrible";
+  market_notes: string | null;
+  lessons: string | null;
+  plan_tomorrow: string | null;
+  created_at?: string;
+};
+
+type WeeklyReview = {
+  id: string;
+  week_start: string;
+  what_went_well: string | null;
+  mistakes: string | null;
+  rule_discipline: number; // 1 - 5
+  focus_next_week: string | null;
+  created_at?: string;
+};
+
+const MOOD_OPTIONS: { id: DailyJournal["mood"]; label: string; icon: string }[] = [
+  { id: "great", label: "Luar Biasa", icon: "🚀" },
+  { id: "good", label: "Tenang & Disiplin", icon: "😊" },
+  { id: "neutral", label: "Netral", icon: "😐" },
+  { id: "bad", label: "Frustasi / Ragu", icon: "😣" },
+  { id: "terrible", label: "Tilt / FOMO", icon: "😡" },
+];
+
+function getMonday(dateStr: string): string {
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const mon = new Date(d.setDate(diff));
+  return `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, "0")}-${String(mon.getDate()).padStart(2, "0")}`;
+}
+
+function getSunday(mondayStr: string): string {
+  const [y, m, d] = mondayStr.split("-").map(Number);
+  const sun = new Date(y, m - 1, d + 6);
+  return `${sun.getFullYear()}-${String(sun.getMonth() + 1).padStart(2, "0")}-${String(sun.getDate()).padStart(2, "0")}`;
+}
+
 function getPageNumbers(current: number, total: number): (number | string)[] {
   if (total <= 7) {
     return Array.from({ length: total }, (_, i) => i + 1);
@@ -811,6 +853,8 @@ function Journal({
   theme: "light" | "dark";
   toggleTheme: () => void;
 }) {
+  const [view, setView] = useState<"trades" | "daily" | "weekly">("trades");
+
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -824,6 +868,25 @@ function Journal({
   const [fPreset, setFPreset] = useState<"all" | "today" | "7d" | "30d" | "thisMonth">("all");
   const [month, setMonth] = useState(() => todayStr().slice(0, 7));
   const [shot, setShot] = useState<string | null>(null);
+
+  // Daily Journal state
+  const [dailyJournals, setDailyJournals] = useState<DailyJournal[]>([]);
+  const [editingDaily, setEditingDaily] = useState<DailyJournal | null>(null);
+  const [dailyDate, setDailyDate] = useState(() => todayStr());
+  const [dailyMood, setDailyMood] = useState<DailyJournal["mood"]>("good");
+  const [dailyMarket, setDailyMarket] = useState("");
+  const [dailyLessons, setDailyLessons] = useState("");
+  const [dailyPlan, setDailyPlan] = useState("");
+  const [savingDaily, setSavingDaily] = useState(false);
+
+  // Weekly Review state
+  const [weeklyReviews, setWeeklyReviews] = useState<WeeklyReview[]>([]);
+  const [activeWeekStart, setActiveWeekStart] = useState(() => getMonday(todayStr()));
+  const [weeklyRating, setWeeklyRating] = useState(4);
+  const [weeklyGood, setWeeklyGood] = useState("");
+  const [weeklyMistakes, setWeeklyMistakes] = useState("");
+  const [weeklyFocus, setWeeklyFocus] = useState("");
+  const [savingWeekly, setSavingWeekly] = useState(false);
 
   // Toast notifications
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -889,7 +952,205 @@ function Journal({
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const loadDailyJournals = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("daily_journals")
+        .select("*")
+        .order("entry_date", { ascending: false });
+      if (!error && data) {
+        setDailyJournals(data as DailyJournal[]);
+        localStorage.setItem("cache_daily_journals", JSON.stringify(data));
+        return;
+      }
+    } catch {}
+    const cached = localStorage.getItem("cache_daily_journals");
+    if (cached) {
+      try { setDailyJournals(JSON.parse(cached)); } catch {}
+    }
+  }, []);
+
+  const loadWeeklyReviews = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("weekly_reviews")
+        .select("*")
+        .order("week_start", { ascending: false });
+      if (!error && data) {
+        setWeeklyReviews(data as WeeklyReview[]);
+        localStorage.setItem("cache_weekly_reviews", JSON.stringify(data));
+        return;
+      }
+    } catch {}
+    const cached = localStorage.getItem("cache_weekly_reviews");
+    if (cached) {
+      try { setWeeklyReviews(JSON.parse(cached)); } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    loadDailyJournals();
+    loadWeeklyReviews();
+  }, [load, loadDailyJournals, loadWeeklyReviews]);
+
+  useEffect(() => {
+    const existing = weeklyReviews.find((w) => w.week_start === activeWeekStart);
+    if (existing) {
+      setWeeklyRating(existing.rule_discipline || 4);
+      setWeeklyGood(existing.what_went_well || "");
+      setWeeklyMistakes(existing.mistakes || "");
+      setWeeklyFocus(existing.focus_next_week || "");
+    } else {
+      setWeeklyRating(4);
+      setWeeklyGood("");
+      setWeeklyMistakes("");
+      setWeeklyFocus("");
+    }
+  }, [activeWeekStart, weeklyReviews]);
+
+  async function handleSaveDaily(ev: FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    setSavingDaily(true);
+    const id = editingDaily?.id || crypto.randomUUID();
+    const row = {
+      id,
+      user_id: session.user.id,
+      entry_date: dailyDate,
+      mood: dailyMood,
+      market_notes: dailyMarket.trim() || null,
+      lessons: dailyLessons.trim() || null,
+      plan_tomorrow: dailyPlan.trim() || null,
+    };
+
+    let savedDb = false;
+    try {
+      const { error } = await supabase
+        .from("daily_journals")
+        .upsert(row, { onConflict: "user_id,entry_date" });
+      if (!error) savedDb = true;
+    } catch {}
+
+    setDailyJournals((prev) => {
+      const filtered = prev.filter((item) => item.entry_date !== dailyDate && item.id !== id);
+      const updated = [row as DailyJournal, ...filtered].sort((a, b) => b.entry_date.localeCompare(a.entry_date));
+      localStorage.setItem("cache_daily_journals", JSON.stringify(updated));
+      return updated;
+    });
+
+    setSavingDaily(false);
+    setEditingDaily(null);
+    setDailyMarket("");
+    setDailyLessons("");
+    setDailyPlan("");
+    addToast(
+      savedDb
+        ? `Jurnal harian tanggal ${dailyDate} berhasil disimpan!`
+        : `Jurnal tanggal ${dailyDate} disimpan (tersimpan lokal).`,
+      "success"
+    );
+  }
+
+  function startEditDaily(d: DailyJournal) {
+    setEditingDaily(d);
+    setDailyDate(d.entry_date);
+    setDailyMood(d.mood);
+    setDailyMarket(d.market_notes || "");
+    setDailyLessons(d.lessons || "");
+    setDailyPlan(d.plan_tomorrow || "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function removeDaily(id: string, date: string) {
+    try {
+      await supabase.from("daily_journals").delete().eq("id", id);
+    } catch {}
+    setDailyJournals((prev) => {
+      const updated = prev.filter((item) => item.id !== id);
+      localStorage.setItem("cache_daily_journals", JSON.stringify(updated));
+      return updated;
+    });
+    if (editingDaily?.id === id) setEditingDaily(null);
+    addToast(`Jurnal tanggal ${date} dihapus.`, "success");
+  }
+
+  async function handleSaveWeekly(ev: FormEvent<HTMLFormElement>) {
+    ev.preventDefault();
+    setSavingWeekly(true);
+    const existing = weeklyReviews.find((w) => w.week_start === activeWeekStart);
+    const id = existing?.id || crypto.randomUUID();
+    const row = {
+      id,
+      user_id: session.user.id,
+      week_start: activeWeekStart,
+      rule_discipline: weeklyRating,
+      what_went_well: weeklyGood.trim() || null,
+      mistakes: weeklyMistakes.trim() || null,
+      focus_next_week: weeklyFocus.trim() || null,
+    };
+
+    let savedDb = false;
+    try {
+      const { error } = await supabase
+        .from("weekly_reviews")
+        .upsert(row, { onConflict: "user_id,week_start" });
+      if (!error) savedDb = true;
+    } catch {}
+
+    setWeeklyReviews((prev) => {
+      const filtered = prev.filter((w) => w.week_start !== activeWeekStart && w.id !== id);
+      const updated = [row as WeeklyReview, ...filtered].sort((a, b) => b.week_start.localeCompare(a.week_start));
+      localStorage.setItem("cache_weekly_reviews", JSON.stringify(updated));
+      return updated;
+    });
+
+    setSavingWeekly(false);
+    addToast(
+      savedDb
+        ? `Review mingguan (${activeWeekStart}) berhasil disimpan!`
+        : `Review mingguan (${activeWeekStart}) disimpan (tersimpan lokal).`,
+      "success"
+    );
+  }
+
+  async function removeWeekly(id: string, weekStart: string) {
+    try {
+      await supabase.from("weekly_reviews").delete().eq("id", id);
+    } catch {}
+    setWeeklyReviews((prev) => {
+      const updated = prev.filter((item) => item.id !== id);
+      localStorage.setItem("cache_weekly_reviews", JSON.stringify(updated));
+      return updated;
+    });
+    addToast(`Review mingguan (${weekStart}) dihapus.`, "success");
+  }
+
+  const shiftWeek = (d: number) => {
+    const [y, m, dt] = activeWeekStart.split("-").map(Number);
+    const next = new Date(y, m - 1, dt + d * 7);
+    const nextMon = getMonday(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`);
+    setActiveWeekStart(nextMon);
+  };
+
+  const activeWeekEnd = useMemo(() => getSunday(activeWeekStart), [activeWeekStart]);
+  const activeWeekTrades = useMemo(
+    () => trades.filter((t) => t.traded_at >= activeWeekStart && t.traded_at <= activeWeekEnd),
+    [trades, activeWeekStart, activeWeekEnd]
+  );
+  const activeWeekStats = useMemo(() => {
+    const ps = activeWeekTrades.map(pnl);
+    const totalPnl = ps.reduce((a, b) => a + b, 0);
+    const count = ps.length;
+    const wins = ps.filter((p) => p > 0).length;
+    const winRate = count ? (wins / count) * 100 : 0;
+    let best = activeWeekTrades[0] || null;
+    let worst = activeWeekTrades[0] || null;
+    activeWeekTrades.forEach((t) => {
+      if (!best || pnl(t) > pnl(best)) best = t;
+      if (!worst || pnl(t) < pnl(worst)) worst = t;
+    });
+    return { totalPnl, count, winRate, best, worst };
+  }, [activeWeekTrades]);
 
   const symbols = useMemo(() => Array.from(new Set(trades.map((t) => t.symbol))).sort(), [trades]);
   const setups = useMemo(
@@ -1299,6 +1560,55 @@ function Journal({
           <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Keluar</button>
         </div>
       </header>
+
+      {/* Top Navigation Tabs */}
+      <div className="nav-tabs" role="tablist">
+        <button
+          type="button"
+          className={`nav-tab ${view === "trades" ? "active" : ""}`}
+          onClick={() => setView("trades")}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+          <span>Dashboard &amp; Trade</span>
+        </button>
+
+        <button
+          type="button"
+          className={`nav-tab ${view === "daily" ? "active" : ""}`}
+          onClick={() => setView("daily")}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
+          <span>Jurnal Harian ({dailyJournals.length})</span>
+        </button>
+
+        <button
+          type="button"
+          className={`nav-tab ${view === "weekly" ? "active" : ""}`}
+          onClick={() => setView("weekly")}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+            <path d="m9 16 2 2 4-4" />
+          </svg>
+          <span>Weekly Review ({weeklyReviews.length})</span>
+        </button>
+      </div>
+
+      {view === "trades" && (
+        <>
 
       <div className="filters">
         <label>Simbol
@@ -1763,6 +2073,384 @@ function Journal({
           </div>
         )}
       </section>
+      </>
+      )}
+
+      {view === "daily" && (
+        <>
+          <section className="panel">
+            <h2>{editingDaily ? "Edit Jurnal Harian" : "Tulis Jurnal Harian"}</h2>
+            {editingDaily && (
+              <div className="banner row" style={{ marginBottom: 12 }}>
+                Mengedit jurnal tanggal <b>{editingDaily.entry_date}</b>.
+                <button
+                  className="link"
+                  type="button"
+                  onClick={() => {
+                    setEditingDaily(null);
+                    setDailyMarket("");
+                    setDailyLessons("");
+                    setDailyPlan("");
+                  }}
+                >
+                  Batal edit
+                </button>
+              </div>
+            )}
+
+            <form className="grid" onSubmit={handleSaveDaily}>
+              <label>
+                Tanggal Jurnal
+                <input
+                  type="date"
+                  value={dailyDate}
+                  onChange={(ev) => setDailyDate(ev.target.value)}
+                  required
+                />
+              </label>
+
+              <div className="wide">
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--mute)", display: "block", marginBottom: 6 }}>
+                  Mood / Psikologi Hari Ini
+                </span>
+                <div className="mood-selector">
+                  {MOOD_OPTIONS.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`mood-btn ${dailyMood === m.id ? "active" : ""}`}
+                      onClick={() => setDailyMood(m.id)}
+                    >
+                      <span>{m.icon}</span>
+                      <span>{m.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label className="wide">
+                Kondisi Market &amp; Emosi Saat Trading
+                <textarea
+                  rows={3}
+                  value={dailyMarket}
+                  onChange={(ev) => setDailyMarket(ev.target.value)}
+                  placeholder="Ceritakan kondisi market hari ini (volatile, sideways, trending) dan bagaimana kestabilan emosi Anda..."
+                />
+              </label>
+
+              <label className="wide">
+                Pelajaran &amp; Evaluasi Hari Ini
+                <textarea
+                  rows={3}
+                  value={dailyLessons}
+                  onChange={(ev) => setDailyLessons(ev.target.value)}
+                  placeholder="Apakah ada rule yang dilanggar? Apa keputusan terbaik atau kesalahan yang dilakukan hari ini?"
+                />
+              </label>
+
+              <label className="wide">
+                Rencana &amp; Fokus Esok Hari
+                <textarea
+                  rows={2}
+                  value={dailyPlan}
+                  onChange={(ev) => setDailyPlan(ev.target.value)}
+                  placeholder="Pair/aset yang dipantau, batas risiko maksimal, atau mindset yang harus dijaga besok..."
+                />
+              </label>
+
+              <div className="row wide">
+                <button className="btn" type="submit" disabled={savingDaily}>
+                  {savingDaily ? "Menyimpan…" : editingDaily ? "Simpan Perubahan" : "Simpan Jurnal Harian"}
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="table-toolbar">
+              <h2>Riwayat Jurnal Harian</h2>
+              <span className="table-count-badge">
+                <b>{dailyJournals.length}</b> catatan
+              </span>
+            </div>
+
+            {dailyJournals.length === 0 ? (
+              <div className="empty">
+                Belum ada catatan jurnal harian. Tulis evaluasi trading dan psikologi harian Anda melalui formulir di atas.
+              </div>
+            ) : (
+              <div className="journal-list">
+                {dailyJournals.map((item) => {
+                  const moodObj = MOOD_OPTIONS.find((m) => m.id === item.mood) || MOOD_OPTIONS[0];
+                  const dayTrades = trades.filter((t) => t.traded_at === item.entry_date);
+                  const dayPnl = dayTrades.reduce((acc, cur) => acc + pnl(cur), 0);
+
+                  return (
+                    <div key={item.id} className="journal-card">
+                      <div className="journal-card-head">
+                        <div className="journal-card-left">
+                          <span className="journal-date-badge">{item.entry_date}</span>
+                          <span className="journal-mood-tag">
+                            <span>{moodObj.icon}</span>
+                            <span>{moodObj.label}</span>
+                          </span>
+                          {dayTrades.length > 0 && (
+                            <span className={`journal-pnl-tag ${cls(dayPnl)}`}>
+                              {dayTrades.length} trade: {sg(dayPnl)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="row" style={{ gap: 8 }}>
+                          <button
+                            type="button"
+                            className="link"
+                            onClick={() => startEditDaily(item)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="x"
+                            onClick={() => removeDaily(item.id, item.entry_date)}
+                            aria-label="Hapus jurnal"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="journal-content-grid">
+                        {item.market_notes && (
+                          <div className="journal-content-block">
+                            <h4>Kondisi Market &amp; Emosi</h4>
+                            <p>{item.market_notes}</p>
+                          </div>
+                        )}
+                        {item.lessons && (
+                          <div className="journal-content-block">
+                            <h4>Pelajaran &amp; Evaluasi</h4>
+                            <p>{item.lessons}</p>
+                          </div>
+                        )}
+                        {item.plan_tomorrow && (
+                          <div className="journal-content-block">
+                            <h4>Rencana Esok Hari</h4>
+                            <p>{item.plan_tomorrow}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {view === "weekly" && (
+        <>
+          <section className="panel">
+            <div className="week-selector">
+              <button
+                type="button"
+                className="btn ghost"
+                style={{ padding: "6px 14px", fontSize: 13 }}
+                onClick={() => shiftWeek(-1)}
+              >
+                &lsaquo; Minggu Sebelumnya
+              </button>
+
+              <div className="week-selector-title">
+                Review Periode: <b>{activeWeekStart}</b> s/d <b>{activeWeekEnd}</b>
+              </div>
+
+              <button
+                type="button"
+                className="btn ghost"
+                style={{ padding: "6px 14px", fontSize: 13 }}
+                onClick={() => shiftWeek(1)}
+              >
+                Minggu Berikutnya &rsaquo;
+              </button>
+            </div>
+
+            <div className="weekly-stats-bar">
+              <div className="weekly-stat-item">
+                <small>Total Trade</small>
+                <b>{activeWeekStats.count} trade</b>
+              </div>
+              <div className="weekly-stat-item">
+                <small>Win Rate</small>
+                <b>{num(activeWeekStats.winRate, 1)}%</b>
+              </div>
+              <div className="weekly-stat-item">
+                <small>Net P&amp;L Minggu Ini</small>
+                <b className={cls(activeWeekStats.totalPnl)}>{sg(activeWeekStats.totalPnl)}</b>
+              </div>
+              <div className="weekly-stat-item">
+                <small>Best Trade</small>
+                <b>
+                  {activeWeekStats.best
+                    ? `${activeWeekStats.best.symbol} (${sg(pnl(activeWeekStats.best))})`
+                    : "–"}
+                </b>
+              </div>
+              <div className="weekly-stat-item">
+                <small>Worst Trade</small>
+                <b>
+                  {activeWeekStats.worst
+                    ? `${activeWeekStats.worst.symbol} (${sg(pnl(activeWeekStats.worst))})`
+                    : "–"}
+                </b>
+              </div>
+            </div>
+
+            <h2>Form Evaluasi Mingguan</h2>
+            <form className="grid" onSubmit={handleSaveWeekly}>
+              <div className="wide">
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--mute)", display: "block", marginBottom: 6 }}>
+                  Rating Disiplin Trading &amp; Eksekusi Rule (1 - 5 Bintang)
+                </span>
+                <div className="star-rating">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      className={`star-btn ${weeklyRating >= star ? "filled" : ""}`}
+                      onClick={() => setWeeklyRating(star)}
+                      title={`Rating ${star} dari 5`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                  <span style={{ fontSize: 14, fontWeight: 700, marginLeft: 8, alignSelf: "center", color: "#f59e0b" }}>
+                    {weeklyRating} / 5 Bintang
+                  </span>
+                </div>
+              </div>
+
+              <label className="wide">
+                Apa Yang Berjalan Sangat Baik Minggu Ini? (What Went Well)
+                <textarea
+                  rows={3}
+                  value={weeklyGood}
+                  onChange={(ev) => setWeeklyGood(ev.target.value)}
+                  placeholder="Setup yang bekerja optimal, kepatuhan SL/TP, kesabaran menunggu konfirmasi..."
+                />
+              </label>
+
+              <label className="wide">
+                Kesalahan &amp; Area Yang Perlu Diperbaiki (Mistakes &amp; Weaknesses)
+                <textarea
+                  rows={3}
+                  value={weeklyMistakes}
+                  onChange={(ev) => setWeeklyMistakes(ev.target.value)}
+                  placeholder="Overtrading, FOMO, revenge trading, memindahkan stop loss lebih jauh..."
+                />
+              </label>
+
+              <label className="wide">
+                Fokus &amp; Komitmen Minggu Depan (Next Week's Focus)
+                <textarea
+                  rows={2}
+                  value={weeklyFocus}
+                  onChange={(ev) => setWeeklyFocus(ev.target.value)}
+                  placeholder="Komitmen 1-2 hal spesifik, misalnya: maks 2 trade per hari, hanya ambil setup breakout valid..."
+                />
+              </label>
+
+              <div className="row wide">
+                <button className="btn" type="submit" disabled={savingWeekly}>
+                  {savingWeekly ? "Menyimpan…" : "Simpan Evaluasi Mingguan"}
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="table-toolbar">
+              <h2>Riwayat Weekly Review Terdahulu</h2>
+              <span className="table-count-badge">
+                <b>{weeklyReviews.length}</b> evaluasi
+              </span>
+            </div>
+
+            {weeklyReviews.length === 0 ? (
+              <div className="empty">
+                Belum ada evaluasi mingguan yang disimpan. Gunakan formulir di atas untuk mendokumentasikan review minggu ini.
+              </div>
+            ) : (
+              <div className="journal-list">
+                {weeklyReviews.map((rev) => {
+                  const [y, m, dt] = rev.week_start.split("-").map(Number);
+                  const endD = new Date(y, m - 1, dt + 6);
+                  const endStr = `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, "0")}-${String(endD.getDate()).padStart(2, "0")}`;
+
+                  return (
+                    <div key={rev.id} className="journal-card">
+                      <div className="journal-card-head">
+                        <div className="journal-card-left">
+                          <span className="journal-date-badge">
+                            Minggu {rev.week_start} s/d {endStr}
+                          </span>
+                          <span style={{ color: "#f59e0b", fontSize: 14, fontWeight: 700 }}>
+                            {"★".repeat(rev.rule_discipline || 0)}
+                            {"☆".repeat(5 - (rev.rule_discipline || 0))}
+                          </span>
+                        </div>
+
+                        <div className="row" style={{ gap: 8 }}>
+                          <button
+                            type="button"
+                            className="link"
+                            onClick={() => {
+                              setActiveWeekStart(rev.week_start);
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }}
+                          >
+                            Buka di Form
+                          </button>
+                          <button
+                            type="button"
+                            className="x"
+                            onClick={() => removeWeekly(rev.id, rev.week_start)}
+                            aria-label="Hapus review"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="journal-content-grid">
+                        {rev.what_went_well && (
+                          <div className="journal-content-block">
+                            <h4>Yang Berjalan Baik</h4>
+                            <p>{rev.what_went_well}</p>
+                          </div>
+                        )}
+                        {rev.mistakes && (
+                          <div className="journal-content-block">
+                            <h4>Kesalahan &amp; Kelemahan</h4>
+                            <p>{rev.mistakes}</p>
+                          </div>
+                        )}
+                        {rev.focus_next_week && (
+                          <div className="journal-content-block">
+                            <h4>Fokus Minggu Depan</h4>
+                            <p>{rev.focus_next_week}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </>
+      )}
 
       {shot && (
         <div className="modal" onClick={() => setShot(null)} role="dialog" aria-label="Screenshot chart">
