@@ -137,25 +137,6 @@ npm start
 
 ---
 
-## 📁 Struktur Direktori
-
-```text
-trade-journal/
-├── app/
-│   ├── globals.css         # Design tokens, tema gelap/terang, komponen CSS
-│   ├── layout.tsx          # Root layout & metadata aplikasi
-│   └── page.tsx            # Komponen utama (Dashboard, Trade, Daily Journal, Weekly Review)
-├── public/                 # Aset statis & ikon
-├── supabase/
-│   └── schema.sql          # DDL lengkap (Tables, RLS, Storage policies)
-├── .env.local              # Konfigurasi Supabase (dikecualikan dari Git)
-├── package.json            # Daftar dependensi & script runner
-├── tsconfig.json           # Konfigurasi TypeScript
-└── README.md               # Dokumentasi proyek
-```
-
----
-
 ## 💡 Troubleshooting
 
 - **Error: `supabaseUrl is required`**  
